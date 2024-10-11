@@ -43,6 +43,7 @@ class MapControl:
         if map_name in ["Town15", "Town11", "Town12", "Town13"]:
             map_name += f"/{map_name}"
         self.__client.load_world("/Game/Carla/Maps/" + map_name, reset_settings=False)
+        self.__world = self.__client.get_world()
         time.sleep(3)
         self.__map = self.__world.get_map()
 

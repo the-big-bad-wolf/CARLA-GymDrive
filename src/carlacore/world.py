@@ -96,13 +96,16 @@ class World:
 
     def set_active_map(self, map_name, reload_map=False):
         self.__map_control.set_active_map(map_name=map_name, reload_map=reload_map)
+        self.__world = self.__client.get_world()
         self.__map = self.__map_control.get_map()
 
     def change_map(self):
         self.__map_control.change_map()
+        self.__world = self.__client.get_world()
 
     def reload_map(self):
         self.__map_control.reload_map()
+        self.__world = self.__client.get_world()
 
     # ============ Traffic Control ============
     def spawn_vehicles(self, num_vehicles=10, autopilot_on=False):
