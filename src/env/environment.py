@@ -246,9 +246,6 @@ class CarlaEnv(gym.Env):
     def close(self):
         # 1. Destroy the vehicle
         self.__vehicle.destroy_vehicle()
-        # 2. Destroy pedestrians and traffic vehicles
-        self.__world.destroy_vehicles()
-        self.__world.destroy_pedestrians()
         # 2. Destroy the world
         self.__world.destroy_world()
         # 3. Close the server
