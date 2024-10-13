@@ -92,6 +92,9 @@ class CarlaEnv(gym.Env):
                 offscreen_rendering=config.SIM_OFFSCREEN_RENDERING,
             )
 
+        if config.SIM_OFFSCREEN_RENDERING:
+            self.__show_sensor_data = False
+
         # 2. Connect to the server
         self.__world = World(synchronous_mode=self.__synchronous_mode)
 
@@ -244,11 +247,18 @@ class CarlaEnv(gym.Env):
 
     # Closes everything, more precisely, destroys the vehicle, along with its sensors, destroys every npc and then destroys the world
     def close(self):
+        # If synchronous mode is on, make it unsynchronous to destroy the vehicle
+        if self.__synchronous_mode:
+            settings = self.__world.get_world().get_settings()
+            settings.synchronous_mode = False
+            settings.fixed_delta_seconds = None
+            self.__world.get_world().apply_settings(settings)
+
         # 1. Destroy the vehicle
         self.__vehicle.destroy_vehicle()
         # 2. Destroy the world
         self.__world.destroy_world()
-        # 3. Close the server
+        # 4. Close the server
         if self.__automatic_server_initialization:
             CarlaServer.close_server(self.__server_process)
 
@@ -325,6 +335,9 @@ class CarlaEnv(gym.Env):
         if self.__verbose:
             print("World loaded!")
 
+        # Settings
+        self.__world.set_settings()
+
         # Weather
         self.__load_weather(scenario_dict["weather_condition"])
         if self.__verbose:
@@ -352,7 +365,17 @@ class CarlaEnv(gym.Env):
                 print("Traffic spawned!")
         self.__toggle_lights()
 
+        # Tick the world to make sure everything is loaded
+        self.__world.tick()
+
     def clean_scenario(self):
+        # If synchronous mode is on, make it unsynchronous to destroy the vehicle
+        if self.__synchronous_mode:
+            settings = self.__world.get_world().get_settings()
+            settings.synchronous_mode = False
+            settings.fixed_delta_seconds = None
+            self.__world.get_world().apply_settings(settings)
+
         self.__vehicle.destroy_vehicle()
         self.__world.destroy_vehicles()
         self.__world.destroy_pedestrians()
