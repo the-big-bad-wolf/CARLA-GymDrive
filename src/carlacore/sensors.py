@@ -1,4 +1,4 @@
-'''
+"""
 Sensors Module:
     It provides classes for each CARLA sensor to attach to the vehicle and listen to the data from the sensor using callbacks.
 
@@ -18,13 +18,14 @@ Sensors Module:
         - Lidar Semantic Segmentation
         - Obstacle Detection
         - Optical Flow Camera (AKA: Motion Camera)
-'''
+"""
 
 import carla
 import numpy as np
 from PIL import Image
 import cv2
 import src.config.configuration as configuration
+
 
 # ====================================== RGB Camera ======================================
 class RGB_Camera:
@@ -36,24 +37,32 @@ class RGB_Camera:
         self.__sensor.listen(lambda data: self.callback(data))
 
     def attach_rgb_camera(self, world, vehicle, sensor_dict):
-        sensor_bp = world.get_blueprint_library().find('sensor.camera.rgb')
+        sensor_bp = world.get_blueprint_library().find("sensor.camera.rgb")
         # attributes
-        sensor_bp.set_attribute('image_size_x', str(sensor_dict['image_size_x']))
-        sensor_bp.set_attribute('image_size_y', str(sensor_dict['image_size_y']))
-        sensor_bp.set_attribute('fov', str(sensor_dict['fov']))
-        sensor_bp.set_attribute('sensor_tick', str(sensor_dict['sensor_tick']))
-        
+        sensor_bp.set_attribute("image_size_x", str(sensor_dict["image_size_x"]))
+        sensor_bp.set_attribute("image_size_y", str(sensor_dict["image_size_y"]))
+        sensor_bp.set_attribute("fov", str(sensor_dict["fov"]))
+        sensor_bp.set_attribute("sensor_tick", str(sensor_dict["sensor_tick"]))
+
         # This will place the camera in the front bumper of the car
-        transform = carla.Transform(carla.Location(x=sensor_dict['location_x'], y=sensor_dict['location_y'] , z=sensor_dict['location_z']))
+        transform = carla.Transform(
+            carla.Location(
+                x=sensor_dict["location_x"],
+                y=sensor_dict["location_y"],
+                z=sensor_dict["location_z"],
+            )
+        )
         camera_sensor = world.spawn_actor(sensor_bp, transform, attach_to=vehicle)
 
         return camera_sensor
-    
+
     def callback(self, data):
         global configuration
 
         # Get the image from the data
-        image = Image.frombytes('RGBA', (data.width, data.height), data.raw_data, 'raw', 'RGBA')
+        image = Image.frombytes(
+            "RGBA", (data.width, data.height), data.raw_data, "raw", "RGBA"
+        )
 
         # Convert the image to a NumPy array
         image_array = np.array(image)
@@ -70,23 +79,23 @@ class RGB_Camera:
         # Display the processed image using Pygame
         self.__last_data = image_array
 
-
         # Save image in directory
         if configuration.VERBOSE:
             timestamp = data.timestamp
-            cv2.imwrite(f'data/rgb_camera/{timestamp}.png', image_array)
-    
+            cv2.imwrite(f"data/rgb_camera/{timestamp}.png", image_array)
+
     def get_last_data(self):
         return self.__last_data
 
     def get_data(self):
         return self.__raw_data
-    
+
     def is_ready(self):
         return self.__sensor_ready
 
     def destroy(self):
         self.__sensor.destroy()
+
 
 # ====================================== LiDAR ======================================
 class Lidar:
@@ -98,38 +107,54 @@ class Lidar:
         self.__sensor.listen(lambda data: self.callback(data))
 
     def attach_lidar(self, world, vehicle, sensor_dict):
-        sensor_bp = world.get_blueprint_library().find('sensor.lidar.ray_cast')
+        sensor_bp = world.get_blueprint_library().find("sensor.lidar.ray_cast")
         # attributes
-        sensor_bp.set_attribute('channels', str(sensor_dict['channels']))
-        sensor_bp.set_attribute('points_per_second', str(sensor_dict['points_per_second']))
-        sensor_bp.set_attribute('rotation_frequency', str(sensor_dict['rotation_frequency']))
-        sensor_bp.set_attribute('range', str(sensor_dict['range']))
-        sensor_bp.set_attribute('upper_fov', str(sensor_dict['upper_fov']))
-        sensor_bp.set_attribute('lower_fov', str(sensor_dict['lower_fov']))
-        sensor_bp.set_attribute('sensor_tick', str(sensor_dict['sensor_tick']))
-        
+        sensor_bp.set_attribute("channels", str(sensor_dict["channels"]))
+        sensor_bp.set_attribute(
+            "points_per_second", str(sensor_dict["points_per_second"])
+        )
+        sensor_bp.set_attribute(
+            "rotation_frequency", str(sensor_dict["rotation_frequency"])
+        )
+        sensor_bp.set_attribute("range", str(sensor_dict["range"]))
+        sensor_bp.set_attribute("upper_fov", str(sensor_dict["upper_fov"]))
+        sensor_bp.set_attribute("lower_fov", str(sensor_dict["lower_fov"]))
+        sensor_bp.set_attribute("sensor_tick", str(sensor_dict["sensor_tick"]))
+
         # This will place the camera in the front bumper of the car
-        transform = carla.Transform(carla.Location(x=sensor_dict['location_x'], y=sensor_dict['location_y'] , z=sensor_dict['location_z']))
+        transform = carla.Transform(
+            carla.Location(
+                x=sensor_dict["location_x"],
+                y=sensor_dict["location_y"],
+                z=sensor_dict["location_z"],
+            )
+        )
         lidar_sensor = world.spawn_actor(sensor_bp, transform, attach_to=vehicle)
 
         return lidar_sensor
-    
+
     def callback(self, data):
         global configuration
 
         # Assuming lidar_data is the raw Lidar data
         lidar_data = data.raw_data
-        lidar_data = np.frombuffer(lidar_data, dtype=np.dtype('f4'))
+        lidar_data = np.frombuffer(lidar_data, dtype=np.dtype("f4"))
         lidar_data = np.reshape(lidar_data, (int(lidar_data.shape[0] / 4), 4))
 
         # Ensure a fixed number of points (e.g., 400)
         fixed_num_points = 500
         if lidar_data.shape[0] < fixed_num_points:
             # Pad with zeros if fewer points than expected
-            lidar_data = np.pad(lidar_data, ((0, fixed_num_points - lidar_data.shape[0]), (0, 0)), mode='constant')
+            lidar_data = np.pad(
+                lidar_data,
+                ((0, fixed_num_points - lidar_data.shape[0]), (0, 0)),
+                mode="constant",
+            )
         elif lidar_data.shape[0] > fixed_num_points:
             # Downsample if more points than expected
-            indices = np.linspace(0, lidar_data.shape[0] - 1, fixed_num_points, dtype=int)
+            indices = np.linspace(
+                0, lidar_data.shape[0] - 1, fixed_num_points, dtype=int
+            )
             lidar_data = lidar_data[indices]
 
         # Update self.__raw_data with the modified Lidar data
@@ -171,19 +196,20 @@ class Lidar:
         # Save image in directory
         if configuration.VERBOSE:
             timestamp = data.timestamp
-            cv2.imwrite(f'data/lidar/{timestamp}.png', lidar_image_array)
-    
+            cv2.imwrite(f"data/lidar/{timestamp}.png", lidar_image_array)
+
     def get_last_data(self):
         return self.__last_data
-    
+
     def get_data(self):
         return self.__raw_data
-    
+
     def is_ready(self):
         return self.__sensor_ready
-    
+
     def destroy(self):
         self.__sensor.destroy()
+
 
 # ====================================== Radar ======================================
 class Radar:
@@ -195,27 +221,35 @@ class Radar:
         self.__sensor.listen(lambda data: self.callback(data))
 
     def attach_radar(self, world, vehicle, sensor_dict):
-        sensor_bp = world.get_blueprint_library().find('sensor.other.radar')
+        sensor_bp = world.get_blueprint_library().find("sensor.other.radar")
         # attributes
-        sensor_bp.set_attribute('horizontal_fov', str(sensor_dict['horizontal_fov']))
-        sensor_bp.set_attribute('vertical_fov', str(sensor_dict['vertical_fov']))
-        sensor_bp.set_attribute('points_per_second', str(sensor_dict['points_per_second']))
-        sensor_bp.set_attribute('range', str(sensor_dict['range']))
-        sensor_bp.set_attribute('sensor_tick', str(sensor_dict['sensor_tick']))
-        
+        sensor_bp.set_attribute("horizontal_fov", str(sensor_dict["horizontal_fov"]))
+        sensor_bp.set_attribute("vertical_fov", str(sensor_dict["vertical_fov"]))
+        sensor_bp.set_attribute(
+            "points_per_second", str(sensor_dict["points_per_second"])
+        )
+        sensor_bp.set_attribute("range", str(sensor_dict["range"]))
+        sensor_bp.set_attribute("sensor_tick", str(sensor_dict["sensor_tick"]))
+
         # This will place the camera in the front bumper of the car
-        transform = carla.Transform(carla.Location(x=sensor_dict['location_x'], y=sensor_dict['location_y'] , z=sensor_dict['location_z']))
+        transform = carla.Transform(
+            carla.Location(
+                x=sensor_dict["location_x"],
+                y=sensor_dict["location_y"],
+                z=sensor_dict["location_z"],
+            )
+        )
         radar_sensor = world.spawn_actor(sensor_bp, transform, attach_to=vehicle)
 
         return radar_sensor
-    
+
     def callback(self, data):
         global configuration
 
         # Get the radar data
         radar_data = data.raw_data
 
-        points = np.frombuffer(radar_data, dtype=np.dtype('f4'))
+        points = np.frombuffer(radar_data, dtype=np.dtype("f4"))
         self.__raw_data = points
         self.__sensor_ready = True
         points = np.reshape(points, (len(data), 4))
@@ -243,26 +277,29 @@ class Radar:
         depth_indices = np.clip(depth_indices, 0, height - 1)
 
         # Set a value (e.g., velocity) at each (azimuth, depth) coordinate in the histogram
-        radar_image_array[depth_indices, azimuth_indices] = 255  # Set a constant value for visibility
+        radar_image_array[depth_indices, azimuth_indices] = (
+            255  # Set a constant value for visibility
+        )
 
         self.__last_data = radar_image_array
 
         # Save image in directory
         if configuration.VERBOSE:
             timestamp = data.timestamp
-            cv2.imwrite(f'data/radar/{timestamp}.png', radar_image_array)
-    
+            cv2.imwrite(f"data/radar/{timestamp}.png", radar_image_array)
+
     def get_last_data(self):
         return self.__last_data
 
     def get_data(self):
         return self.__raw_data
-    
+
     def is_ready(self):
         return self.__sensor_ready
 
     def destroy(self):
         self.__sensor.destroy()
+
 
 # ====================================== GNSS ======================================
 class GNSS:
@@ -273,16 +310,22 @@ class GNSS:
         self.__sensor.listen(lambda data: self.callback(data))
 
     def attach_gnss(self, world, vehicle, sensor_dict):
-        sensor_bp = world.get_blueprint_library().find('sensor.other.gnss')
+        sensor_bp = world.get_blueprint_library().find("sensor.other.gnss")
         # attributes
-        sensor_bp.set_attribute('sensor_tick', str(sensor_dict['sensor_tick']))
-        
+        sensor_bp.set_attribute("sensor_tick", str(sensor_dict["sensor_tick"]))
+
         # This will place the camera in the front bumper of the car
-        transform = carla.Transform(carla.Location(x=sensor_dict['location_x'], y=sensor_dict['location_y'] , z=sensor_dict['location_z']))
+        transform = carla.Transform(
+            carla.Location(
+                x=sensor_dict["location_x"],
+                y=sensor_dict["location_y"],
+                z=sensor_dict["location_z"],
+            )
+        )
         gnss_sensor = world.spawn_actor(sensor_bp, transform, attach_to=vehicle)
 
         return gnss_sensor
-    
+
     def callback(self, data):
         global configuration
         self.__last_data = data
@@ -290,10 +333,16 @@ class GNSS:
 
     def get_last_data(self):
         return self.__last_data
-    
+
     def get_data(self):
-        return np.array([self.__last_data.latitude, self.__last_data.longitude, self.__last_data.altitude])
-    
+        return np.array(
+            [
+                self.__last_data.latitude,
+                self.__last_data.longitude,
+                self.__last_data.altitude,
+            ]
+        )
+
     def is_ready(self):
         return self.__sensor_ready
 
@@ -309,16 +358,22 @@ class IMU:
         self.__sensor_ready = False
 
     def attach_imu(self, world, vehicle, sensor_dict):
-        sensor_bp = world.get_blueprint_library().find('sensor.other.imu')
+        sensor_bp = world.get_blueprint_library().find("sensor.other.imu")
         # attributes
-        sensor_bp.set_attribute('sensor_tick', str(sensor_dict['sensor_tick']))
-        
+        sensor_bp.set_attribute("sensor_tick", str(sensor_dict["sensor_tick"]))
+
         # This will place the camera in the front bumper of the car
-        transform = carla.Transform(carla.Location(x=sensor_dict['location_x'], y=sensor_dict['location_y'] , z=sensor_dict['location_z']))
+        transform = carla.Transform(
+            carla.Location(
+                x=sensor_dict["location_x"],
+                y=sensor_dict["location_y"],
+                z=sensor_dict["location_z"],
+            )
+        )
         imu_sensor = world.spawn_actor(sensor_bp, transform, attach_to=vehicle)
 
         return imu_sensor
-    
+
     def callback(self, data):
         global configuration
         self.__last_data = data
@@ -326,12 +381,13 @@ class IMU:
 
     def get_last_data(self):
         return self.__last_data
-    
+
     def is_ready(self):
         return self.__sensor_ready
 
     def destroy(self):
         self.__sensor.destroy()
+
 
 # ====================================== Collision ======================================
 class Collision:
@@ -342,27 +398,34 @@ class Collision:
         self.critical_collision = False
 
     def attach_collision(self, world, vehicle, sensor_dict):
-        sensor_bp = world.get_blueprint_library().find('sensor.other.collision')
-        
+        sensor_bp = world.get_blueprint_library().find("sensor.other.collision")
+
         # This will place the camera in the front bumper of the car
-        transform = carla.Transform(carla.Location(x=sensor_dict['location_x'], y=sensor_dict['location_y'] , z=sensor_dict['location_z']))
+        transform = carla.Transform(
+            carla.Location(
+                x=sensor_dict["location_x"],
+                y=sensor_dict["location_y"],
+                z=sensor_dict["location_z"],
+            )
+        )
         collision_sensor = world.spawn_actor(sensor_bp, transform, attach_to=vehicle)
 
         return collision_sensor
-    
+
     def callback(self, data):
         if configuration.VERBOSE:
             print(f"Collision Occurred at {data.timestamp} with {data.other_actor}")
         self.critical_collision = True
-    
+
     def collision_occurred(self):
         return self.critical_collision
-    
+
     def is_ready(self):
         return self.__sensor_ready
 
     def destroy(self):
         self.__sensor.destroy()
+
 
 # ====================================== Lane Invasion ======================================
 class Lane_Invasion:
@@ -373,24 +436,111 @@ class Lane_Invasion:
         self.lane_transgression = False
 
     def attach_lane_invasion(self, world, vehicle, sensor_dict):
-        sensor_bp = world.get_blueprint_library().find('sensor.other.lane_invasion')
-        
+        sensor_bp = world.get_blueprint_library().find("sensor.other.lane_invasion")
+
         # This will place the camera in the front bumper of the car
-        transform = carla.Transform(carla.Location(x=sensor_dict['location_x'], y=sensor_dict['location_y'] , z=sensor_dict['location_z']))
-        lane_invasion_sensor = world.spawn_actor(sensor_bp, transform, attach_to=vehicle)
+        transform = carla.Transform(
+            carla.Location(
+                x=sensor_dict["location_x"],
+                y=sensor_dict["location_y"],
+                z=sensor_dict["location_z"],
+            )
+        )
+        lane_invasion_sensor = world.spawn_actor(
+            sensor_bp, transform, attach_to=vehicle
+        )
 
         return lane_invasion_sensor
-    
+
     def callback(self, data):
         self.lane_transgression = True
         if configuration.VERBOSE:
-            print(f"Lane Invasion Occurred at {data.timestamp} with {data.crossed_lane_markings}")
-    
+            print(
+                f"Lane Invasion Occurred at {data.timestamp} with {data.crossed_lane_markings}"
+            )
+
     def is_ready(self):
         return self.__sensor_ready
-    
+
     def lane_invasion_occurred(self):
         return self.lane_transgression
+
+    def destroy(self):
+        self.__sensor.destroy()
+
+
+class BEV_Camera:
+    def __init__(self, world, vehicle, sensor_dict):
+        self.__sensor = self.attach_bev_camera(world, vehicle, sensor_dict)
+        self.__last_data = None
+        self.__raw_data = None
+        self.__sensor_ready = False
+        self.__sensor.listen(lambda data: self.callback(data))
+
+    def attach_bev_camera(self, world, vehicle, sensor_dict):
+        sensor_bp = world.get_blueprint_library().find(
+            "sensor.camera.semantic_segmentation"
+        )
+        # attributes
+        sensor_bp.set_attribute("image_size_x", str(sensor_dict["image_size_x"]))
+        sensor_bp.set_attribute("image_size_y", str(sensor_dict["image_size_y"]))
+        sensor_bp.set_attribute("fov", str(sensor_dict["fov"]))
+        sensor_bp.set_attribute("sensor_tick", str(sensor_dict["sensor_tick"]))
+
+        # This will place the camera in the front bumper of the car
+        transform = carla.Transform(
+            carla.Location(
+                x=sensor_dict["location_x"],
+                y=sensor_dict["location_y"],
+                z=sensor_dict["location_z"],
+            ),
+            carla.Rotation(
+                pitch=-90.0,
+                yaw=0.0,
+                roll=0.0,
+            ),
+        )
+        camera_sensor = world.spawn_actor(sensor_bp, transform, attach_to=vehicle)
+
+        return camera_sensor
+
+    def callback(self, data):
+        global configuration
+
+        data.convert(carla.ColorConverter.CityScapesPalette)
+        # Get the image from the data
+        image = Image.frombytes(
+            "RGBA", (data.width, data.height), data.raw_data, "raw", "RGBA"
+        )
+
+        # Convert the image to a NumPy array
+        image_array = np.array(image)
+
+        # Take out the alpha channel
+        image_array = image_array[:, :, :3]
+
+        self.__raw_data = image_array
+        self.__sensor_ready = True
+
+        # Ensure the array is contiguous in memory
+        image_array = np.ascontiguousarray(image_array)
+
+        # Display the processed image using Pygame
+        self.__last_data = image_array
+
+        # Save image in directory
+        if configuration.VERBOSE:
+            timestamp = data.timestamp
+            cv2.imwrite(f"data/rgb_camera/{timestamp}.png", image_array)
+
+    def get_last_data(self):
+        return self.__last_data
+
+    def get_data(self):
+        return self.__raw_data
+
+    def is_ready(self):
+        return self.__sensor_ready
 
     def destroy(self):
         self.__sensor.destroy()

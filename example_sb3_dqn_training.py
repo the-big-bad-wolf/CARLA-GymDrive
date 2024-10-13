@@ -20,9 +20,9 @@ def make_env():
         time_limit=60000,
         initialize_server=False,
         random_weather=False,
-        synchronous_mode=False,
+        synchronous_mode=True,
         continuous=True,
-        show_sensor_data=True,
+        show_sensor_data=False,
         has_traffic=True,
         verbose=False,
     )
@@ -39,7 +39,7 @@ def main():
     model = SAC(
         policy="MultiInputPolicy",
         env=env,
-        learning_rate=1e-4,
+        learning_rate=1e-3,
         buffer_size=900,
         learning_starts=10,
         batch_size=32,
