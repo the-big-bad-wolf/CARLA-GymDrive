@@ -88,7 +88,10 @@ class RGB_Camera:
         return self.__last_data
 
     def get_data(self):
-        return self.__raw_data
+        if self.__raw_data is not None:
+            return self.__raw_data
+        else:
+            return np.zeros((480, 640, 3))
 
     def is_ready(self):
         return self.__sensor_ready
@@ -537,7 +540,10 @@ class BEV_Camera:
         return self.__last_data
 
     def get_data(self):
-        return self.__raw_data
+        if self.__raw_data is not None:
+            return self.__raw_data
+        else:
+            return np.zeros((480, 640, 3))
 
     def is_ready(self):
         return self.__sensor_ready
