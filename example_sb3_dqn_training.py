@@ -17,12 +17,12 @@ from stable_baselines3.common.vec_env import DummyVecEnv, VecTransposeImage
 def make_env():
     env = gym.make(
         "carla-rl-gym-v0",
-        time_limit=60000,
+        time_limit=30,
         initialize_server=False,
         random_weather=False,
         synchronous_mode=True,
         continuous=True,
-        show_sensor_data=False,
+        show_sensor_data=True,
         has_traffic=True,
         verbose=False,
     )
@@ -36,26 +36,16 @@ def main():
     env = make_env()
 
     # Create the agent
-    model = SAC(
+    model = PPO(
         policy="MultiInputPolicy",
         env=env,
-        learning_rate=1e-3,
-        buffer_size=900,
-        learning_starts=10,
-        batch_size=32,
-        tau=0.005,
-        gamma=0.99,
-        train_freq=4,
-        gradient_steps=1,
-        target_update_interval=2000,
-        verbose=1,
     )
 
     # Learn 10000 steps
     model.learn(total_timesteps=10000)
 
     # Save the agent
-    model.save(f"dqn_example_agent")
+    model.save(f"ppo_agent")
 
     # Close the environment
     env.close()

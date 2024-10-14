@@ -267,7 +267,7 @@ class CarlaEnv(gym.Env):
         observation_space = self.__vehicle.get_observation_data()
         # rgb_image = observation_space["rgb_data"]
         # lidar_data = observation_space["lidar_data"]
-        bev_image = observation_space["bev_data"]
+        # bev_image = observation_space["bev_data"]
         vehicle_loc = self.__vehicle.get_location()
         current_position = np.array([vehicle_loc.x, vehicle_loc.y, vehicle_loc.z])
         target_position = np.array(
@@ -289,7 +289,7 @@ class CarlaEnv(gym.Env):
         observation = {
             # "rgb_data": np.uint8(rgb_image),
             # "lidar_data": np.float32(lidar_data),
-            "bev_data": np.uint8(bev_image),
+            # "bev_data": np.uint8(bev_image),
             "position": np.float32(current_position),
             "target_position": np.float32(target_position),
             "next_waypoint_position": np.float32(next_waypoint_position),
@@ -329,14 +329,14 @@ class CarlaEnv(gym.Env):
             self.__world.reload_map()
         self.__first_episode = False
 
+        # Settings
+        self.__world.set_settings()
+
         self.__load_world(scenario_dict["map_name"])
         self.__map = self.__world.update_traffic_map()
         time.sleep(2.0)
         if self.__verbose:
             print("World loaded!")
-
-        # Settings
-        self.__world.set_settings()
 
         # Weather
         self.__load_weather(scenario_dict["weather_condition"])

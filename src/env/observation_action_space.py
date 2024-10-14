@@ -16,9 +16,6 @@ situations_map = {"Road": 0, "Roundabout": 1, "Junction": 2, "Tunnel": 3}
 
 observation_space = spaces.Dict(
     {
-        "bev_data": spaces.Box(
-            low=0, high=255, shape=observation_shapes["rgb_data"], dtype=np.uint8
-        ),
         "position": spaces.Box(
             low=-np.inf,
             high=np.inf,

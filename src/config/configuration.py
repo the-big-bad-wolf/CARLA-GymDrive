@@ -7,7 +7,7 @@ MARGIN = 30
 BORDER_WIDTH = 5
 
 # Vehicle and Sensors attributes
-SENSOR_FPS = 30
+SENSOR_FPS = 10
 VERBOSE = False
 VEHICLE_SENSORS_FILE = "src/config/default_sensors.json"
 VEHICLE_PHYSICS_FILE = "src/config/default_vehicle_physics.json"
@@ -19,8 +19,8 @@ SIM_PORT = 2000
 SIM_TIMEOUT = 100.0
 SIM_LOW_QUALITY = False
 SIM_OFFSCREEN_RENDERING = False
-SIM_NO_RENDERING = False
-SIM_FPS = 30
+SIM_NO_RENDERING = True
+SIM_FPS = 10
 
 # Environment attributes
 ENV_SCENARIOS_FILE = "src/config/default_scenarios.json"
