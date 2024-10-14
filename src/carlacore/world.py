@@ -89,10 +89,13 @@ class World:
         self.__map_control.set_active_map(map_name=map_name, reload_map=reload_map)
         self.__world = self.__client.get_world()
         self.__map = self.__map_control.get_map()
+        self.update_traffic_world()
 
     def change_map(self):
         self.__map_control.change_map()
         self.__world = self.__client.get_world()
+        self.__map = self.__map_control.get_map()
+        self.update_traffic_world()
 
     def reload_map(self):
         self.__map_control.reload_map()
@@ -147,6 +150,9 @@ class World:
     def update_traffic_map(self):
         self.__traffic_control.update_map(self.__map)
         return self.__map
+
+    def update_traffic_world(self):
+        self.__traffic_control.update_world(self.__world)
 
     # ============ Weather Control ===============
     def get_weather_presets(self):
