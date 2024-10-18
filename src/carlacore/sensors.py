@@ -22,6 +22,7 @@ Sensors Module:
 
 import carla
 import numpy as np
+import math
 from PIL import Image
 import cv2
 import src.config.configuration as configuration
@@ -122,6 +123,7 @@ class Lidar:
         sensor_bp.set_attribute("range", str(sensor_dict["range"]))
         sensor_bp.set_attribute("upper_fov", str(sensor_dict["upper_fov"]))
         sensor_bp.set_attribute("lower_fov", str(sensor_dict["lower_fov"]))
+        sensor_bp.set_attribute("horizontal_fov", str(sensor_dict["horizontal_fov"]))
         sensor_bp.set_attribute("sensor_tick", str(sensor_dict["sensor_tick"]))
 
         # This will place the camera in the front bumper of the car
@@ -550,3 +552,147 @@ class BEV_Camera:
 
     def destroy(self):
         self.__sensor.destroy()
+
+
+class Circogram:
+    def __init__(self, world, vehicle, sensor_dict):
+        self.__sensors = self.attach_circogram(world, vehicle, sensor_dict)
+        self.__sensor_ready_list = [False] * len(self.__sensors)
+        self.__last_data = [None] * len(self.__sensors)
+        self.__raw_data = [None] * len(self.__sensors)
+        for sensor, _ in self.__sensors:
+            sensor.listen(lambda data: self.callback(data))
+
+    def attach_circogram(self, world, vehicle, sensor_dict) -> list[tuple]:
+        vehicle_transform = vehicle.get_transform()
+        vehicle_width = vehicle.bounding_box.extent.x
+        vehicle_length = vehicle.bounding_box.extent.y
+        vehicle_height = vehicle.bounding_box.extent.z
+
+        num_rays = sensor_dict["num_rays"]
+        angles = [i * 360 / num_rays for i in range(num_rays)]
+        sensor_locations = []
+        for angle in angles:
+            rad = math.radians(angle)
+            if math.cos(rad) != 0:
+                slope = math.sin(rad) / math.cos(rad)
+                if abs(slope) <= vehicle_length / vehicle_width:
+                    x = vehicle_width / 2 if math.cos(rad) > 0 else -vehicle_width / 2
+                    y = slope * x
+                else:
+                    y = vehicle_length / 2 if math.sin(rad) > 0 else -vehicle_length / 2
+                    x = y / slope
+            else:
+                x = 0
+                y = vehicle_length / 2 if math.sin(rad) > 0 else -vehicle_length / 2
+
+            sensor_locations.append(((x, y), angle))
+
+        sensors = []
+        sensor_bp = world.get_blueprint_library().find("sensor.lidar.ray_cast_semantic")
+        sensor_bp.set_attribute("channels", str(sensor_dict["channels"]))
+        sensor_bp.set_attribute(
+            "points_per_second", str(sensor_dict["points_per_second"])
+        )
+        sensor_bp.set_attribute("range", str(sensor_dict["range"]))
+        sensor_bp.set_attribute("upper_fov", str(sensor_dict["upper_fov"]))
+        sensor_bp.set_attribute("lower_fov", str(sensor_dict["lower_fov"]))
+        sensor_bp.set_attribute("sensor_tick", str(sensor_dict["sensor_tick"]))
+        sensor_bp.set_attribute("rotation_frequency", "0")
+        sensor_bp.set_attribute("horizontal_fov", "0")
+        for location in sensor_locations:
+            # Place lidars at each sensor location
+            transform = carla.Transform(
+                carla.Location(
+                    x=vehicle_transform.location.x + location[0][0],
+                    y=vehicle_transform.location.y + location[0][1],
+                    z=vehicle_transform.location.z + vehicle_height,
+                ),
+                carla.Rotation(
+                    pitch=0.0,
+                    yaw=location[1],
+                    roll=0.0,
+                ),
+            )
+            sensor = world.spawn_actor(sensor_bp, transform, attach_to=vehicle)
+            sensors.append((sensor, location[1].yaw))
+
+        return sensors
+
+    def callback(self, data):
+        global configuration
+
+        # Assuming lidar_data is the raw Lidar data
+        lidar_data = data.raw_data
+        lidar_data = np.frombuffer(lidar_data, dtype=np.dtype("f4"))
+        lidar_data = np.reshape(lidar_data, (int(lidar_data.shape[0] / 4), 4))
+
+        # Ensure a fixed number of points (e.g., 400)
+        fixed_num_points = 500
+        if lidar_data.shape[0] < fixed_num_points:
+            # Pad with zeros if fewer points than expected
+            lidar_data = np.pad(
+                lidar_data,
+                ((0, fixed_num_points - lidar_data.shape[0]), (0, 0)),
+                mode="constant",
+            )
+        elif lidar_data.shape[0] > fixed_num_points:
+            # Downsample if more points than expected
+            indices = np.linspace(
+                0, lidar_data.shape[0] - 1, fixed_num_points, dtype=int
+            )
+            lidar_data = lidar_data[indices]
+
+        # Update self.__raw_data with the modified Lidar data
+        self.__raw_data = lidar_data
+        self.__sensor_ready = True
+
+        # Extract X, Y, Z coordinates and intensity values
+        points_xyz = lidar_data[:, :3]
+        intensity = lidar_data[:, 3]
+
+        # Intensity scaling factor
+        intensity_scale = 10.0  # Adjust this value to control the brightness
+
+        # Create a 2D histogram with a predetermined size
+        width, height = 640, 360
+        lidar_image_array = np.zeros((height, width))
+
+        # Scale and shift X and Y coordinates to fit within the histogram size
+        x_scaled = ((points_xyz[:, 0] + 50) / 100) * (width - 1)
+        y_scaled = ((points_xyz[:, 1] + 50) / 100) * (height - 1)
+
+        # Round the scaled coordinates to integers
+        x_indices = np.round(x_scaled).astype(int)
+        y_indices = np.round(y_scaled).astype(int)
+
+        # Clip the indices to stay within the image bounds
+        x_indices = np.clip(x_indices, 0, width - 1)
+        y_indices = np.clip(y_indices, 0, height - 1)
+
+        # Assign scaled intensity values to the corresponding pixel in the histogram
+        lidar_image_array[y_indices, x_indices] = intensity * intensity_scale
+
+        # Clip the intensity values to stay within the valid color range
+        lidar_image_array = np.clip(lidar_image_array, 0, 255)
+
+        # Display the processed image using Pygame
+        self.__last_data = lidar_image_array
+
+        # Save image in directory
+        if configuration.VERBOSE:
+            timestamp = data.timestamp
+            cv2.imwrite(f"data/lidar/{timestamp}.png", lidar_image_array)
+
+    def get_last_data(self):
+        return self.__last_data
+
+    def get_data(self):
+        return self.__raw_data
+
+    def is_ready(self):
+        return all(self.__sensor_ready_list)
+
+    def destroy(self):
+        for sensor, _ in self.__sensors:
+            sensor.destroy()

@@ -157,6 +157,13 @@ class Vehicle:
                     sensor_dict=vehicle_data["lidar"],
                 )
                 os.makedirs("data/lidar", exist_ok=True)
+            elif sensor == "circogram":
+                self.__sensor_dict[sensor] = sensors.Circogram(
+                    world=world,
+                    vehicle=self.__vehicle,
+                    sensor_dict=vehicle_data["circogram"],
+                )
+                os.makedirs("data/circogram", exist_ok=True)
             elif sensor == "radar":
                 self.__sensor_dict[sensor] = sensors.Radar(
                     world=world,
@@ -201,6 +208,9 @@ class Vehicle:
         if "lidar" in self.__sensor_dict:
             lidar_data = self.__sensor_dict["lidar"].get_data()
             data_dict["lidar_data"] = lidar_data
+        if "lidar" in self.__sensor_dict:
+            circogram_data = self.__sensor_dict["circogram"].get_data()
+            data_dict["circogram_data"] = circogram_data
         if "gnss" in self.__sensor_dict:
             gnss_data = self.__sensor_dict["gnss"].get_data()
             data_dict["gnss_data"] = gnss_data
