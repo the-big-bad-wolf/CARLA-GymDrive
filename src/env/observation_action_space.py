@@ -5,6 +5,7 @@ import numpy as np
 observation_shapes = {
     "rgb_data": (360, 640, 3),
     "lidar_data": (3, 500),
+    "circogram_data": (80, 3),
     "position": (3,),
     "target_position": (3,),
     "next_waypoint_position": (3,),
@@ -16,6 +17,12 @@ situations_map = {"Road": 0, "Roundabout": 1, "Junction": 2, "Tunnel": 3}
 
 observation_space = spaces.Dict(
     {
+        "circogram": spaces.Box(
+            low=-np.inf,
+            high=np.inf,
+            shape=observation_shapes["circogram_data"],
+            dtype=np.float32,
+        ),
         "position": spaces.Box(
             low=-np.inf,
             high=np.inf,

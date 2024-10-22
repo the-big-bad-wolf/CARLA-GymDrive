@@ -22,6 +22,7 @@ Sensors Module:
 
 import carla
 import numpy as np
+import math
 from PIL import Image
 import cv2
 import src.config.configuration as configuration
@@ -122,6 +123,7 @@ class Lidar:
         sensor_bp.set_attribute("range", str(sensor_dict["range"]))
         sensor_bp.set_attribute("upper_fov", str(sensor_dict["upper_fov"]))
         sensor_bp.set_attribute("lower_fov", str(sensor_dict["lower_fov"]))
+        sensor_bp.set_attribute("horizontal_fov", str(sensor_dict["horizontal_fov"]))
         sensor_bp.set_attribute("sensor_tick", str(sensor_dict["sensor_tick"]))
 
         # This will place the camera in the front bumper of the car
@@ -550,3 +552,140 @@ class BEV_Camera:
 
     def destroy(self):
         self.__sensor.destroy()
+
+
+class Circogram:
+    def __init__(self, world, vehicle, sensor_dict):
+        self.__world = world
+        self.__sensors = self.attach_circogram(world, vehicle, sensor_dict)
+        self.__sensor_ready_list = [False] * len(self.__sensors)
+        self.__circogram: list[None | float] = [None] * len(self.__sensors)
+        self.__circogram_velocity_x = [0.0] * len(self.__sensors)
+        self.__circogram_velocity_y = [0.0] * len(self.__sensors)
+        self.__drivable_tags = {1: "Roads", 24: "RoadLine"}
+        self.__ego_idx = vehicle.id
+        for sensor, angle in self.__sensors:
+            sensor.listen(
+                lambda point_cloud, angle=angle: self.callback(point_cloud, angle)
+            )
+
+    def attach_circogram(self, world, vehicle, sensor_dict) -> list[tuple]:
+        vehicle_width = vehicle.bounding_box.extent.x * 2
+        vehicle_length = vehicle.bounding_box.extent.y * 2
+        vehicle_height = vehicle.bounding_box.extent.z * 2
+
+        num_rays = sensor_dict["num_rays"]
+        angles = [i * 360 / num_rays for i in range(num_rays)]
+        sensor_locations = []
+        for angle in angles:
+            rad = math.radians(angle)
+            if math.cos(rad) != 0:
+                slope = math.sin(rad) / math.cos(rad)
+                if abs(slope) <= vehicle_length / vehicle_width:
+                    x = vehicle_width / 2 if math.cos(rad) > 0 else -vehicle_width / 2
+                    y = slope * x
+                else:
+                    y = vehicle_length / 2 if math.sin(rad) > 0 else -vehicle_length / 2
+                    x = y / slope
+            else:
+                x = 0
+                y = vehicle_length / 2 if math.sin(rad) > 0 else -vehicle_length / 2
+
+            sensor_locations.append(((x, y), angle))
+
+        sensors = []
+        sensor_bp = world.get_blueprint_library().find("sensor.lidar.ray_cast_semantic")
+        sensor_bp.set_attribute("channels", str(sensor_dict["channels"]))
+        sensor_bp.set_attribute(
+            "points_per_second", str(sensor_dict["points_per_second"])
+        )
+        sensor_bp.set_attribute("range", str(sensor_dict["range"]))
+        sensor_bp.set_attribute("upper_fov", str(sensor_dict["upper_fov"]))
+        sensor_bp.set_attribute("lower_fov", str(sensor_dict["lower_fov"]))
+        sensor_bp.set_attribute("sensor_tick", str(sensor_dict["sensor_tick"]))
+        sensor_bp.set_attribute("rotation_frequency", "0")
+        sensor_bp.set_attribute("horizontal_fov", "0")
+        for location in sensor_locations:
+            # Place lidars at each sensor location
+            transform = carla.Transform(
+                carla.Location(
+                    x=location[0][0],
+                    y=location[0][1],
+                    z=vehicle_height,
+                ),
+                carla.Rotation(
+                    pitch=0.0,
+                    yaw=location[1],
+                    roll=0.0,
+                ),
+            )
+            sensor = world.spawn_actor(sensor_bp, transform, attach_to=vehicle)
+            sensors.append((sensor, location[1]))
+        return sensors
+
+    def callback(self, point_cloud, angle: float):
+        global configuration
+        detections = sorted(
+            point_cloud,
+            key=lambda detection: detection.point.x**2 + detection.point.y**2,
+        )
+
+        driveable_index = None
+        obstacle_idx = 0
+        for i in range(len(detections)):
+            if detections[i].object_tag in self.__drivable_tags:
+                driveable_index = i
+            else:
+                obstacle_idx = detections[i].object_idx
+                break
+
+        if driveable_index is None:
+            driveable_distance = 0
+        else:
+            driveable_distance = math.sqrt(
+                detections[driveable_index].point.x ** 2
+                + detections[driveable_index].point.y ** 2
+            )
+
+        index = int(round(angle * len(self.__sensors) / 360))
+        self.__circogram[index] = driveable_distance
+
+        # Static obstacle
+        if obstacle_idx == 0:
+            velocity_x = 0
+            velocity_y = 0
+        else:
+            velocity_x = self.__world.get_actor(obstacle_idx).get_velocity().x
+            velocity_y = self.__world.get_actor(obstacle_idx).get_velocity().y
+        self.__circogram_velocity_x[index] = velocity_x
+        self.__circogram_velocity_y[index] = velocity_y
+
+        self.__sensor_ready_list[index] = True
+
+    def get_last_data(self):
+        image = np.zeros((360, 640))
+        angle_diff = 360 / len(self.__circogram)
+        for i, distance in enumerate(self.__circogram):
+            if distance is not None:
+                angle = i * angle_diff
+                x = int(distance * 5 * math.cos(math.radians(angle)))
+                y = int(distance * 5 * math.sin(math.radians(angle)))
+                cv2.line(image, (320, 180), (320 + y, 180 - x), (255, 255, 255), 1)
+
+        return image
+
+    def get_data(self):
+        circogram_array = np.array(self.__circogram).reshape(-1, 1)
+        velocity_x_array = np.array(self.__circogram_velocity_x).reshape(-1, 1)
+        velocity_y_array = np.array(self.__circogram_velocity_y).reshape(-1, 1)
+        combined_array = np.hstack(
+            (circogram_array, velocity_x_array, velocity_y_array)
+        )
+        return combined_array
+
+    def is_ready(self):
+        return all(self.__sensor_ready_list)
+
+    def destroy(self):
+        for sensor, _ in self.__sensors:
+            sensor.destroy()

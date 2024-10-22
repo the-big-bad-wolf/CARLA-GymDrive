@@ -268,6 +268,7 @@ class CarlaEnv(gym.Env):
         # rgb_image = observation_space["rgb_data"]
         # lidar_data = observation_space["lidar_data"]
         # bev_image = observation_space["bev_data"]
+        circogram = observation_space["circogram_data"]
         vehicle_loc = self.__vehicle.get_location()
         current_position = np.array([vehicle_loc.x, vehicle_loc.y, vehicle_loc.z])
         target_position = np.array(
@@ -290,6 +291,7 @@ class CarlaEnv(gym.Env):
             # "rgb_data": np.uint8(rgb_image),
             # "lidar_data": np.float32(lidar_data),
             # "bev_data": np.uint8(bev_image),
+            "circogram": np.float32(circogram),
             "position": np.float32(current_position),
             "target_position": np.float32(target_position),
             "next_waypoint_position": np.float32(next_waypoint_position),
