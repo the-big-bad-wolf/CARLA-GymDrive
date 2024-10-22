@@ -208,7 +208,7 @@ class Vehicle:
         if "lidar" in self.__sensor_dict:
             lidar_data = self.__sensor_dict["lidar"].get_data()
             data_dict["lidar_data"] = lidar_data
-        if "lidar" in self.__sensor_dict:
+        if "circogram" in self.__sensor_dict:
             circogram_data = self.__sensor_dict["circogram"].get_data()
             data_dict["circogram_data"] = circogram_data
         if "gnss" in self.__sensor_dict:

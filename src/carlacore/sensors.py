@@ -556,18 +556,23 @@ class BEV_Camera:
 
 class Circogram:
     def __init__(self, world, vehicle, sensor_dict):
+        self.__world = world
         self.__sensors = self.attach_circogram(world, vehicle, sensor_dict)
         self.__sensor_ready_list = [False] * len(self.__sensors)
-        self.__last_data = [None] * len(self.__sensors)
-        self.__raw_data = [None] * len(self.__sensors)
-        for sensor, _ in self.__sensors:
-            sensor.listen(lambda data: self.callback(data))
+        self.__circogram: list[None | float] = [None] * len(self.__sensors)
+        self.__circogram_velocity_x = [0.0] * len(self.__sensors)
+        self.__circogram_velocity_y = [0.0] * len(self.__sensors)
+        self.__drivable_tags = {1: "Roads", 24: "RoadLine"}
+        self.__ego_idx = vehicle.id
+        for sensor, angle in self.__sensors:
+            sensor.listen(
+                lambda point_cloud, angle=angle: self.callback(point_cloud, angle)
+            )
 
     def attach_circogram(self, world, vehicle, sensor_dict) -> list[tuple]:
-        vehicle_transform = vehicle.get_transform()
-        vehicle_width = vehicle.bounding_box.extent.x
-        vehicle_length = vehicle.bounding_box.extent.y
-        vehicle_height = vehicle.bounding_box.extent.z
+        vehicle_width = vehicle.bounding_box.extent.x * 2
+        vehicle_length = vehicle.bounding_box.extent.y * 2
+        vehicle_height = vehicle.bounding_box.extent.z * 2
 
         num_rays = sensor_dict["num_rays"]
         angles = [i * 360 / num_rays for i in range(num_rays)]
@@ -604,9 +609,9 @@ class Circogram:
             # Place lidars at each sensor location
             transform = carla.Transform(
                 carla.Location(
-                    x=vehicle_transform.location.x + location[0][0],
-                    y=vehicle_transform.location.y + location[0][1],
-                    z=vehicle_transform.location.z + vehicle_height,
+                    x=location[0][0],
+                    y=location[0][1],
+                    z=vehicle_height,
                 ),
                 carla.Rotation(
                     pitch=0.0,
@@ -615,80 +620,68 @@ class Circogram:
                 ),
             )
             sensor = world.spawn_actor(sensor_bp, transform, attach_to=vehicle)
-            sensors.append((sensor, location[1].yaw))
-
+            sensors.append((sensor, location[1]))
         return sensors
 
-    def callback(self, data):
+    def callback(self, point_cloud, angle: float):
         global configuration
+        detections = sorted(
+            point_cloud,
+            key=lambda detection: detection.point.x**2 + detection.point.y**2,
+        )
 
-        # Assuming lidar_data is the raw Lidar data
-        lidar_data = data.raw_data
-        lidar_data = np.frombuffer(lidar_data, dtype=np.dtype("f4"))
-        lidar_data = np.reshape(lidar_data, (int(lidar_data.shape[0] / 4), 4))
+        driveable_index = None
+        obstacle_idx = 0
+        for i in range(len(detections)):
+            if detections[i].object_tag in self.__drivable_tags:
+                driveable_index = i
+            else:
+                obstacle_idx = detections[i].object_idx
+                break
 
-        # Ensure a fixed number of points (e.g., 400)
-        fixed_num_points = 500
-        if lidar_data.shape[0] < fixed_num_points:
-            # Pad with zeros if fewer points than expected
-            lidar_data = np.pad(
-                lidar_data,
-                ((0, fixed_num_points - lidar_data.shape[0]), (0, 0)),
-                mode="constant",
+        if driveable_index is None:
+            driveable_distance = 0
+        else:
+            driveable_distance = math.sqrt(
+                detections[driveable_index].point.x ** 2
+                + detections[driveable_index].point.y ** 2
             )
-        elif lidar_data.shape[0] > fixed_num_points:
-            # Downsample if more points than expected
-            indices = np.linspace(
-                0, lidar_data.shape[0] - 1, fixed_num_points, dtype=int
-            )
-            lidar_data = lidar_data[indices]
 
-        # Update self.__raw_data with the modified Lidar data
-        self.__raw_data = lidar_data
-        self.__sensor_ready = True
+        index = int(round(angle * len(self.__sensors) / 360))
+        self.__circogram[index] = driveable_distance
 
-        # Extract X, Y, Z coordinates and intensity values
-        points_xyz = lidar_data[:, :3]
-        intensity = lidar_data[:, 3]
+        # Static obstacle
+        if obstacle_idx == 0:
+            velocity_x = 0
+            velocity_y = 0
+        else:
+            velocity_x = self.__world.get_actor(obstacle_idx).get_velocity().x
+            velocity_y = self.__world.get_actor(obstacle_idx).get_velocity().y
+        self.__circogram_velocity_x[index] = velocity_x
+        self.__circogram_velocity_y[index] = velocity_y
 
-        # Intensity scaling factor
-        intensity_scale = 10.0  # Adjust this value to control the brightness
-
-        # Create a 2D histogram with a predetermined size
-        width, height = 640, 360
-        lidar_image_array = np.zeros((height, width))
-
-        # Scale and shift X and Y coordinates to fit within the histogram size
-        x_scaled = ((points_xyz[:, 0] + 50) / 100) * (width - 1)
-        y_scaled = ((points_xyz[:, 1] + 50) / 100) * (height - 1)
-
-        # Round the scaled coordinates to integers
-        x_indices = np.round(x_scaled).astype(int)
-        y_indices = np.round(y_scaled).astype(int)
-
-        # Clip the indices to stay within the image bounds
-        x_indices = np.clip(x_indices, 0, width - 1)
-        y_indices = np.clip(y_indices, 0, height - 1)
-
-        # Assign scaled intensity values to the corresponding pixel in the histogram
-        lidar_image_array[y_indices, x_indices] = intensity * intensity_scale
-
-        # Clip the intensity values to stay within the valid color range
-        lidar_image_array = np.clip(lidar_image_array, 0, 255)
-
-        # Display the processed image using Pygame
-        self.__last_data = lidar_image_array
-
-        # Save image in directory
-        if configuration.VERBOSE:
-            timestamp = data.timestamp
-            cv2.imwrite(f"data/lidar/{timestamp}.png", lidar_image_array)
+        self.__sensor_ready_list[index] = True
 
     def get_last_data(self):
-        return self.__last_data
+        image = np.zeros((360, 640))
+        angle_diff = 360 / len(self.__circogram)
+        for i, distance in enumerate(self.__circogram):
+            if distance is not None:
+                angle = i * angle_diff
+                x = int(distance * 5 * math.cos(math.radians(angle)))
+                y = int(distance * 5 * math.sin(math.radians(angle)))
+                cv2.line(image, (320, 180), (320 + y, 180 - x), (255, 255, 255), 1)
+
+        return image
 
     def get_data(self):
-        return self.__raw_data
+        circogram_array = np.array(self.__circogram).reshape(-1, 1)
+        velocity_x_array = np.array(self.__circogram_velocity_x).reshape(-1, 1)
+        velocity_y_array = np.array(self.__circogram_velocity_y).reshape(-1, 1)
+        combined_array = np.hstack(
+            (circogram_array, velocity_x_array, velocity_y_array)
+        )
+        return combined_array
 
     def is_ready(self):
         return all(self.__sensor_ready_list)
