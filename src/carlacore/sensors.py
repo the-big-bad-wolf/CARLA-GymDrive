@@ -458,11 +458,18 @@ class Lane_Invasion:
         return lane_invasion_sensor
 
     def callback(self, data):
-        self.lane_transgression = True
+        for lane_marking in data.crossed_lane_markings:
+            if (
+                lane_marking.type == carla.LaneMarkingType.NONE
+                or lane_marking.type == carla.LaneMarkingType.Grass
+                or lane_marking.type == carla.LaneMarkingType.Curb
+            ):
+                self.lane_transgression = True
+                break
+
         if configuration.VERBOSE:
-            print(
-                f"Lane Invasion Occurred at {data.timestamp} with {data.crossed_lane_markings}"
-            )
+            for marking in data.crossed_lane_markings:
+                print(f"Lane Invasion Occurred at {data.timestamp} with {marking.type}")
 
     def is_ready(self):
         return self.__sensor_ready
@@ -681,6 +688,7 @@ class Circogram:
         combined_array = np.hstack(
             (circogram_array, velocity_x_array, velocity_y_array)
         )
+        print(combined_array)
         return combined_array
 
     def is_ready(self):

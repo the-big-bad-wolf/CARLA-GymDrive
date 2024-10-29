@@ -17,7 +17,7 @@ from stable_baselines3.common.vec_env import DummyVecEnv, VecTransposeImage
 def make_env():
     env = gym.make(
         "carla-rl-gym-v0",
-        time_limit=30,
+        time_limit=15,
         initialize_server=False,
         random_weather=False,
         synchronous_mode=True,
@@ -36,16 +36,22 @@ def main():
     env = make_env()
 
     # Create the agent
-    model = PPO(
+    """     model = PPO(
         policy="MultiInputPolicy",
+        n_steps=2048,
         env=env,
+        verbose=1,
+        tensorboard_log="data/tensorboard/",
+    ) """
+    model = PPO.load(
+        path="ppo_agent_125000", env=env, verbose=1, tensorboard_log="data/tensorboard/"
     )
-
-    # Learn 10000 steps
-    model.learn(total_timesteps=10000)
-
+    # Save the agent at regular intervals
+    for i in range(1, 21):
+        model.learn(total_timesteps=25000)
+        model.save(f"ppo_agent_{i*25000}_test")
     # Save the agent
-    model.save(f"ppo_agent")
+    model.save(f"ppo_agent_test")
 
     # Close the environment
     env.close()

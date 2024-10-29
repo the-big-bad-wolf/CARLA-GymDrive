@@ -284,7 +284,13 @@ class CarlaEnv(gym.Env):
             )
         except IndexError:
             next_waypoint_position = np.array([0.0, 0.0, 0.0])
-        speed = np.array([self.__vehicle.get_speed()])
+
+        speed_vector = self.__vehicle.get_speed()
+        speed = np.array([speed_vector.x, speed_vector.y])
+
+        acceleration_vector = self.__vehicle.get_acceleration()
+        acceleration = np.array([acceleration_vector.x, acceleration_vector.y])
+
         situation = self.__situations_map[self.__active_scenario_dict["situation"]]
 
         observation = {
@@ -296,7 +302,8 @@ class CarlaEnv(gym.Env):
             "target_position": np.float32(target_position),
             "next_waypoint_position": np.float32(next_waypoint_position),
             "speed": np.float32(speed),
-            "situation": situation,
+            "acceleration": np.float32(acceleration),
+            # "situation": situation,
         }
 
         self.__observation = self.pre_processing.preprocess_data(observation)
@@ -305,7 +312,7 @@ class CarlaEnv(gym.Env):
         self.__reward_target_pos = target_position
         self.__reward_current_pos = current_position
         self.__reward_next_waypoint_pos = next_waypoint_position
-        self.__reward_speed = speed[0]
+        self.__reward_speed = speed_vector.length() * 3.6
 
     # ===================================================== SCENARIO METHODS =====================================================
     def load_scenario(self, scenario_name, seed=None):

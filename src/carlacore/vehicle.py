@@ -348,6 +348,8 @@ class Vehicle:
     def get_brake(self):
         return self.__brake
 
-    # In Km/h
     def get_speed(self):
-        return 3.6 * self.__vehicle.get_velocity().length()
+        return self.__vehicle.get_velocity()
+
+    def get_acceleration(self):
+        return self.__vehicle.get_acceleration()
