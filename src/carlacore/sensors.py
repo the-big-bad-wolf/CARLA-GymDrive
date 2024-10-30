@@ -688,7 +688,6 @@ class Circogram:
         combined_array = np.hstack(
             (circogram_array, velocity_x_array, velocity_y_array)
         )
-        print(combined_array)
         return combined_array
 
     def is_ready(self):
