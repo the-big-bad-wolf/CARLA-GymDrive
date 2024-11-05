@@ -26,32 +26,27 @@ def make_env():
         has_traffic=True,
         verbose=False,
     )
-    env = DummyVecEnv([lambda: env])
-    env = VecTransposeImage(env)
     return env
 
 
 def main():
     # Create the environment
-    env = make_env()
-
+    env = DummyVecEnv([make_env])
     # Create the agent
-    """     model = PPO(
+    model = PPO(
         policy="MultiInputPolicy",
         n_steps=2048,
+        learning_rate=0.003,
         env=env,
         verbose=1,
         tensorboard_log="data/tensorboard/",
-    ) """
-    model = PPO.load(
-        path="ppo_agent_125000", env=env, verbose=1, tensorboard_log="data/tensorboard/"
     )
+    # model = PPO.load("models/candidate.zip", env=env)
+
     # Save the agent at regular intervals
     for i in range(1, 21):
-        model.learn(total_timesteps=25000)
-        model.save(f"ppo_agent_{i*25000}_test")
-    # Save the agent
-    model.save(f"ppo_agent_test")
+        model.learn(total_timesteps=10000)
+        model.save(f"output/ppo_agent_{i*10000}")
 
     # Close the environment
     env.close()

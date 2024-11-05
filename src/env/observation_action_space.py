@@ -1,50 +1,65 @@
 from gymnasium import spaces
 import numpy as np
 
+
 # Change this according to your needs.
 observation_shapes = {
-    "rgb_data": (360, 640, 3),
-    "lidar_data": (3, 500),
-    "circogram_data": (80, 3),
-    "position": (3,),
-    "target_position": (3,),
-    "next_waypoint_position": (3,),
-    "speed": (2,),
-    "acceleration": (2,),
-    "num_of_stuations": 4,
+    "circogram_distance": (60,),
+    "circogram_velocity": (60, 2),
+    "position": (2,),
+    "target_position": (2,),
+    "next_waypoint_relative_position": (2,),
+    "speed": (1,),
+    "heading": (1,),
+    "previous_steering": (1,),
+    "previous_throttle_brake": (1,),
 }
 
 situations_map = {"Road": 0, "Roundabout": 1, "Junction": 2, "Tunnel": 3}
 
 observation_space = spaces.Dict(
     {
-        "circogram": spaces.Box(
-            low=-np.inf,
-            high=np.inf,
-            shape=observation_shapes["circogram_data"],
+        "circogram_distance": spaces.Box(
+            low=0,
+            high=np.inf,  # UPDATE WHEN CHANGING CIRCOGRAM RANGE
+            shape=observation_shapes["circogram_distance"],
             dtype=np.float32,
         ),
-        "position": spaces.Box(
+        "circogram_velocity": spaces.Box(
             low=-np.inf,
             high=np.inf,
-            shape=observation_shapes["position"],
+            shape=observation_shapes["circogram_velocity"],
             dtype=np.float32,
         ),
-        "target_position": spaces.Box(
+        "next_waypoint_relative_position": spaces.Box(
+            low=-np.inf,
+            high=np.inf,  # May want to split this
+            shape=observation_shapes["next_waypoint_relative_position"],
+            dtype=np.float32,
+        ),
+        "speed": spaces.Box(
             low=-np.inf,
             high=np.inf,
-            shape=observation_shapes["target_position"],
+            shape=observation_shapes["speed"],
             dtype=np.float32,
         ),
-        "next_waypoint_position": spaces.Box(
+        "heading": spaces.Box(
             low=-np.inf,
             high=np.inf,
-            shape=observation_shapes["next_waypoint_position"],
+            shape=observation_shapes["heading"],
             dtype=np.float32,
         ),
-        "speed": spaces.Box(low=-np.inf, high=np.inf, shape=(2,), dtype=np.float32),
-        "acceleration": spaces.Box(
-            low=-np.inf, high=np.inf, shape=(2,), dtype=np.float32
+        "previous_steering": spaces.Box(
+            low=-1,
+            high=1,
+            shape=observation_shapes["previous_steering"],
+            dtype=np.float32,
+        ),
+        "previous_throttle_brake": spaces.Box(
+            low=-1,
+            high=1,
+            shape=observation_shapes["previous_throttle_brake"],
+            dtype=np.float32,
         ),
     }
 )

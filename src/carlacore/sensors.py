@@ -20,6 +20,7 @@ Sensors Module:
         - Optical Flow Camera (AKA: Motion Camera)
 """
 
+from typing import Tuple
 import carla
 import numpy as np
 import math
@@ -458,15 +459,7 @@ class Lane_Invasion:
         return lane_invasion_sensor
 
     def callback(self, data):
-        for lane_marking in data.crossed_lane_markings:
-            if (
-                lane_marking.type == carla.LaneMarkingType.NONE
-                or lane_marking.type == carla.LaneMarkingType.Grass
-                or lane_marking.type == carla.LaneMarkingType.Curb
-            ):
-                self.lane_transgression = True
-                break
-
+        self.lane_transgression = True
         if configuration.VERBOSE:
             for marking in data.crossed_lane_markings:
                 print(f"Lane Invasion Occurred at {data.timestamp} with {marking.type}")
@@ -567,13 +560,14 @@ class Circogram:
         self.__sensors = self.attach_circogram(world, vehicle, sensor_dict)
         self.__sensor_ready_list = [False] * len(self.__sensors)
         self.__circogram: list[None | float] = [None] * len(self.__sensors)
-        self.__circogram_velocity_x = [0.0] * len(self.__sensors)
-        self.__circogram_velocity_y = [0.0] * len(self.__sensors)
+        self.__circogram_velocity_radial = [0.0] * len(self.__sensors)
+        self.__circogram_velocity_transverse = [0.0] * len(self.__sensors)
         self.__drivable_tags = {1: "Roads", 24: "RoadLine"}
-        self.__ego_idx = vehicle.id
-        for sensor, angle in self.__sensors:
+        for sensor, location, angle in self.__sensors:
             sensor.listen(
-                lambda point_cloud, angle=angle: self.callback(point_cloud, angle)
+                lambda point_cloud, location=location, angle=angle: self.callback(
+                    point_cloud, location, angle
+                )
             )
 
     def attach_circogram(self, world, vehicle, sensor_dict) -> list[tuple]:
@@ -627,10 +621,10 @@ class Circogram:
                 ),
             )
             sensor = world.spawn_actor(sensor_bp, transform, attach_to=vehicle)
-            sensors.append((sensor, location[1]))
+            sensors.append((sensor, location[0], location[1]))
         return sensors
 
-    def callback(self, point_cloud, angle: float):
+    def callback(self, point_cloud, location: Tuple[float, float], angle: float):
         global configuration
         detections = sorted(
             point_cloud,
@@ -639,10 +633,12 @@ class Circogram:
 
         driveable_index = None
         obstacle_idx = 0
+        obstacle_detection = detections[-1]
         for i in range(len(detections)):
             if detections[i].object_tag in self.__drivable_tags:
                 driveable_index = i
             else:
+                obstacle_detection = detections[i]
                 obstacle_idx = detections[i].object_idx
                 break
 
@@ -664,8 +660,15 @@ class Circogram:
         else:
             velocity_x = self.__world.get_actor(obstacle_idx).get_velocity().x
             velocity_y = self.__world.get_actor(obstacle_idx).get_velocity().y
-        self.__circogram_velocity_x[index] = velocity_x
-        self.__circogram_velocity_y[index] = velocity_y
+
+        x = location[0] + obstacle_detection.point.x
+        y = location[1] + obstacle_detection.point.y
+
+        velocity_radial = (x * velocity_x + y * velocity_y) / math.sqrt(x**2 + y**2)
+        velocity_transverse = (x * velocity_y - y * velocity_x) / (x**2 + y**2)
+
+        self.__circogram_velocity_radial[index] = velocity_radial
+        self.__circogram_velocity_transverse[index] = velocity_transverse
 
         self.__sensor_ready_list[index] = True
 
@@ -683,10 +686,14 @@ class Circogram:
 
     def get_data(self):
         circogram_array = np.array(self.__circogram).reshape(-1, 1)
-        velocity_x_array = np.array(self.__circogram_velocity_x).reshape(-1, 1)
-        velocity_y_array = np.array(self.__circogram_velocity_y).reshape(-1, 1)
+        velocity_radial_array = np.array(self.__circogram_velocity_radial).reshape(
+            -1, 1
+        )
+        velocity_transverse_array = np.array(
+            self.__circogram_velocity_transverse
+        ).reshape(-1, 1)
         combined_array = np.hstack(
-            (circogram_array, velocity_x_array, velocity_y_array)
+            (circogram_array, velocity_radial_array, velocity_transverse_array)
         )
         return combined_array
 
@@ -694,5 +701,5 @@ class Circogram:
         return all(self.__sensor_ready_list)
 
     def destroy(self):
-        for sensor, _ in self.__sensors:
+        for sensor, _, _ in self.__sensors:
             sensor.destroy()

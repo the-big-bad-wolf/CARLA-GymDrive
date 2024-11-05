@@ -171,7 +171,7 @@ class CarlaEnv(gym.Env):
         self.__update_observation()
 
         # 5. Start the reward function
-        self.__reward_func.reset(self.__waypoints)
+        self.__reward_func.reset(self.__waypoints, self.__vehicle)
 
         # 6. Start the timer
         self.__episode_number += 1
@@ -219,6 +219,7 @@ class CarlaEnv(gym.Env):
             self.__reward_target_pos,
             self.__reward_next_waypoint_pos,
             self.__reward_speed,
+            self.__reward_min_distance,
         )
         terminated = self.__reward_func.get_terminated()
         self.__waypoints = self.__reward_func.get_waypoints()
@@ -265,54 +266,67 @@ class CarlaEnv(gym.Env):
     # ===================================================== OBSERVATION/ACTION METHODS =====================================================
     def __update_observation(self):
         observation_space = self.__vehicle.get_observation_data()
-        # rgb_image = observation_space["rgb_data"]
-        # lidar_data = observation_space["lidar_data"]
-        # bev_image = observation_space["bev_data"]
+
+        vehicle_position = self.__vehicle.get_location()
+        vehicle_position = np.array([vehicle_position.x, vehicle_position.y])
+
+        vehicle_heading = np.deg2rad(self.__vehicle.get_heading())
+
         circogram = observation_space["circogram_data"]
-        vehicle_loc = self.__vehicle.get_location()
-        current_position = np.array([vehicle_loc.x, vehicle_loc.y, vehicle_loc.z])
+        circogram_distance = circogram[:, 0]
+        circogram_velocity = circogram[:, 1:3]
+
+        vehicle_velocity = self.__vehicle.get_velocity()
+        vehicle_velocity = np.array([vehicle_velocity.x, vehicle_velocity.y])
+        vehicle_speed = np.linalg.norm(vehicle_velocity)
+
         target_position = np.array(
             [
                 self.__active_scenario_dict["target_position"]["x"],
                 self.__active_scenario_dict["target_position"]["y"],
-                self.__active_scenario_dict["target_position"]["z"],
             ]
         )
+
         try:
             next_waypoint_position = np.array(
-                [self.__waypoints[0][0], self.__waypoints[0][1], self.__waypoints[0][2]]
+                [self.__waypoints[0][0], self.__waypoints[0][1]]
             )
         except IndexError:
-            next_waypoint_position = np.array([0.0, 0.0, 0.0])
+            print("No more waypoints!")
+            next_waypoint_position = np.array([0.0, 0.0])
 
-        speed_vector = self.__vehicle.get_speed()
-        speed = np.array([speed_vector.x, speed_vector.y])
-
-        acceleration_vector = self.__vehicle.get_acceleration()
-        acceleration = np.array([acceleration_vector.x, acceleration_vector.y])
-
-        situation = self.__situations_map[self.__active_scenario_dict["situation"]]
+        next_waypoint_relative_position = next_waypoint_position - vehicle_position
+        # Convert to polar coordinates
+        distance_to_next_waypoint = np.linalg.norm(next_waypoint_relative_position)
+        angle_to_next_waypoint = np.arctan2(
+            next_waypoint_relative_position[1], next_waypoint_relative_position[0]
+        )
+        next_waypoint_relative_position = np.array(
+            [distance_to_next_waypoint, angle_to_next_waypoint]
+        )
 
         observation = {
-            # "rgb_data": np.uint8(rgb_image),
-            # "lidar_data": np.float32(lidar_data),
-            # "bev_data": np.uint8(bev_image),
-            "circogram": np.float32(circogram),
-            "position": np.float32(current_position),
-            "target_position": np.float32(target_position),
-            "next_waypoint_position": np.float32(next_waypoint_position),
-            "speed": np.float32(speed),
-            "acceleration": np.float32(acceleration),
-            # "situation": situation,
+            "circogram_distance": np.float32(circogram_distance),
+            "circogram_velocity": np.float32(circogram_velocity),
+            "next_waypoint_relative_position": np.float32(
+                next_waypoint_relative_position
+            ),
+            "speed": np.float32(np.array([vehicle_speed])),
+            "heading": np.float32(np.array([vehicle_heading])),
+            "previous_steering": np.float32(np.array([self.__vehicle.get_steering()])),
+            "previous_throttle_brake": np.float32(
+                np.array([self.__vehicle.get_throttle_brake()])
+            ),
         }
 
         self.__observation = self.pre_processing.preprocess_data(observation)
 
         # Aux variables for the reward function so the information that is given to the ego vehicle and to the reward function is the same no matter what happens
         self.__reward_target_pos = target_position
-        self.__reward_current_pos = current_position
+        self.__reward_current_pos = vehicle_position
         self.__reward_next_waypoint_pos = next_waypoint_position
-        self.__reward_speed = speed_vector.length() * 3.6
+        self.__reward_speed = vehicle_speed
+        self.__reward_min_distance = circogram[:, 0].min()
 
     # ===================================================== SCENARIO METHODS =====================================================
     def load_scenario(self, scenario_name, seed=None):
@@ -540,6 +554,7 @@ class CarlaEnv(gym.Env):
             waypoints.append(current_waypoint.transform.location)
             current_waypoint = current_waypoint.next(spacing)[0]
 
+        waypoints.append(target_waypoint.transform.location)
         return waypoints[
             1:
         ]  # Take out the first waypoint because it is the starting point
