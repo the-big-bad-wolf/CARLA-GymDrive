@@ -57,6 +57,12 @@ class TrafficControl:
         if config.VERBOSE:
             print("Successfully spawned {} vehicles!".format(num_vehicles))
 
+    def clean_vehicles(self):
+        for vehicle in self.__active_vehicles:
+            del vehicle
+        del self.__active_vehicles[:]
+        self.__active_vehicles = []
+
     def destroy_vehicles(self):
         for vehicle in self.__active_vehicles:
             vehicle.set_autopilot(False)

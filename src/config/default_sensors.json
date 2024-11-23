@@ -10,10 +10,10 @@
   },
   "circogram": {
     "channels": 1000,
-    "range": 100.0,
+    "range": 50.0,
     "points_per_second": 10000,
     "upper_fov": 0.0,
-    "lower_fov": -89.0,
+    "lower_fov": -90.0,
     "sensor_tick": 0.0,
     "num_rays": 60
   },

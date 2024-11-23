@@ -119,6 +119,12 @@ class Vehicle:
 
         return vehicle_data
 
+    def clean_vehicle(self):
+        # Destroy sensors
+        del self.__sensor_dict, self.__vehicle
+        self.__vehicle = None
+        self.__sensor_dict = {}
+
     def destroy_vehicle(self):
         if self.__vehicle is None:
             return

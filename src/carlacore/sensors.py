@@ -21,6 +21,7 @@ Sensors Module:
 """
 
 from typing import Tuple
+import weakref
 import carla
 import numpy as np
 import math
@@ -557,16 +558,22 @@ class BEV_Camera:
 class Circogram:
     def __init__(self, world, vehicle, sensor_dict):
         self.__world = world
+        self.__vehicle = vehicle
         self.__sensors = self.attach_circogram(world, vehicle, sensor_dict)
         self.__sensor_ready_list = [False] * len(self.__sensors)
-        self.__circogram: list[None | float] = [None] * len(self.__sensors)
+        self.__circogram: list[None | float] = [50] * len(self.__sensors)
+        self.__circogram_velocity_x = [0.0] * len(self.__sensors)
+        self.__circogram_velocity_y = [0.0] * len(self.__sensors)
         self.__circogram_velocity_radial = [0.0] * len(self.__sensors)
-        self.__circogram_velocity_transverse = [0.0] * len(self.__sensors)
-        self.__drivable_tags = {1: "Roads", 24: "RoadLine"}
+        self.__circogram_velocity_transverse_sin = [0.0] * len(self.__sensors)
+        self.__circogram_velocity_transverse_cos = [0.0] * len(self.__sensors)
+        self.__drivable_tags = {1: "Roads", 24: "RoadLine", 21: "Water"}
+
+        weak_self = weakref.ref(self)
         for sensor, location, angle in self.__sensors:
             sensor.listen(
                 lambda point_cloud, location=location, angle=angle: self.callback(
-                    point_cloud, location, angle
+                    weak_self, point_cloud, location, angle
                 )
             )
 
@@ -624,18 +631,23 @@ class Circogram:
             sensors.append((sensor, location[0], location[1]))
         return sensors
 
-    def callback(self, point_cloud, location: Tuple[float, float], angle: float):
+    @staticmethod
+    def callback(weakself, point_cloud, location: Tuple[float, float], angle: float):
         global configuration
+        self = weakself()
         detections = sorted(
             point_cloud,
             key=lambda detection: detection.point.x**2 + detection.point.y**2,
         )
 
         driveable_index = None
-        obstacle_idx = 0
+        obstacle_idx = detections[-1].object_idx
         obstacle_detection = detections[-1]
         for i in range(len(detections)):
-            if detections[i].object_tag in self.__drivable_tags:
+            if (
+                detections[i].object_tag in self.__drivable_tags
+                or detections[i].object_idx == self.__vehicle.id
+            ):
                 driveable_index = i
             else:
                 obstacle_detection = detections[i]
@@ -660,15 +672,22 @@ class Circogram:
         else:
             velocity_x = self.__world.get_actor(obstacle_idx).get_velocity().x
             velocity_y = self.__world.get_actor(obstacle_idx).get_velocity().y
-
+        """ 
         x = location[0] + obstacle_detection.point.x
         y = location[1] + obstacle_detection.point.y
-
         velocity_radial = (x * velocity_x + y * velocity_y) / math.sqrt(x**2 + y**2)
         velocity_transverse = (x * velocity_y - y * velocity_x) / (x**2 + y**2)
 
         self.__circogram_velocity_radial[index] = velocity_radial
-        self.__circogram_velocity_transverse[index] = velocity_transverse
+        self.__circogram_velocity_transverse_sin[index] = np.sin(velocity_transverse)
+        self.__circogram_velocity_transverse_cos[index] = np.cos(velocity_transverse)
+        """
+        self.__circogram_velocity_x[index] = (
+            velocity_x - self.__vehicle.get_velocity().x
+        )
+        self.__circogram_velocity_y[index] = (
+            velocity_y - self.__vehicle.get_velocity().y
+        )
 
         self.__sensor_ready_list[index] = True
 
@@ -678,22 +697,37 @@ class Circogram:
         for i, distance in enumerate(self.__circogram):
             if distance is not None:
                 angle = i * angle_diff
-                x = int(distance * 5 * math.cos(math.radians(angle)))
-                y = int(distance * 5 * math.sin(math.radians(angle)))
+                x = int(distance * 10 * math.cos(math.radians(angle)))
+                y = int(distance * 10 * math.sin(math.radians(angle)))
                 cv2.line(image, (320, 180), (320 + y, 180 - x), (255, 255, 255), 1)
 
         return image
 
     def get_data(self):
         circogram_array = np.array(self.__circogram).reshape(-1, 1)
+        circogram_velocity_x_array = np.array(self.__circogram_velocity_x).reshape(
+            -1, 1
+        )
+        circogram_velocity_y_array = np.array(self.__circogram_velocity_y).reshape(
+            -1, 1
+        )
+        """
         velocity_radial_array = np.array(self.__circogram_velocity_radial).reshape(
             -1, 1
         )
-        velocity_transverse_array = np.array(
-            self.__circogram_velocity_transverse
+        velocity_transverse_sin_array = np.array(
+            self.__circogram_velocity_transverse_sin
         ).reshape(-1, 1)
+        velocity_transverse_cos_array = np.array(
+            self.__circogram_velocity_transverse_cos
+        ).reshape(-1, 1)
+        """
         combined_array = np.hstack(
-            (circogram_array, velocity_radial_array, velocity_transverse_array)
+            (
+                circogram_array,
+                circogram_velocity_x_array,
+                circogram_velocity_y_array,
+            )
         )
         return combined_array
 

@@ -24,7 +24,7 @@ def make_env():
         continuous=True,
         show_sensor_data=True,
         has_traffic=True,
-        verbose=False,
+        verbose=True,
     )
     return env
 
@@ -35,18 +35,18 @@ def main():
     # Create the agent
     model = PPO(
         policy="MultiInputPolicy",
-        n_steps=2048,
-        learning_rate=0.003,
         env=env,
         verbose=1,
         tensorboard_log="data/tensorboard/",
     )
-    # model = PPO.load("models/candidate.zip", env=env)
+    # model = PPO.load("models/candidate15.zip", env=env)
 
     # Save the agent at regular intervals
     for i in range(1, 21):
-        model.learn(total_timesteps=10000)
-        model.save(f"output/ppo_agent_{i*10000}")
+        model.learn(
+            total_timesteps=25000
+        )  # This causes some issues the spawning actors when not restarting the CARLA server
+        model.save(f"output/ppo_agent_{i*25000}")
 
     # Close the environment
     env.close()

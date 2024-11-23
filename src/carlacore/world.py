@@ -48,8 +48,11 @@ class World:
     def set_timeout(self, timeout):
         self.__client.set_timeout(timeout)
 
-    def tick(self):
-        self.__world.tick()
+    def tick(self, seconds=None):
+        if seconds is not None:
+            self.__world.tick(seconds)
+        else:
+            self.__world.tick()
 
     # ============ Weather Control ============
     # The output is a tuple (carla.WeatherPreset, Str: name of the weather preset)
@@ -127,6 +130,9 @@ class World:
 
     def destroy_vehicles(self):
         self.__traffic_control.destroy_vehicles()
+
+    def clean_vehicles(self):
+        self.__traffic_control.clean_vehicles()
 
     def toggle_autopilot(self, autopilot_on=True):
         self.__traffic_control.toggle_autopilot(autopilot_on)

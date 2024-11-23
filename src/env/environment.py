@@ -28,6 +28,7 @@ Action Space:
 
 """
 
+import dis
 import numpy as np
 import json
 import time
@@ -144,11 +145,11 @@ class CarlaEnv(gym.Env):
             self.__active_scenario_name = self.__chose_situation(seed)
 
         # 2. Load the scenario
+        self.clean_scenario()
         print(f"Loading scenario {self.__active_scenario_name}...")
         try:
             self.load_scenario(self.__active_scenario_name, seed)
         except KeyboardInterrupt as e:
-            self.clean_scenario()
             print("Scenario loading interrupted!")
             exit(0)
         print("Scenario loaded!")
@@ -162,12 +163,12 @@ class CarlaEnv(gym.Env):
         # 4. Get list of waypoints to the target from the starting position
         self.__waypoints = self.get_path_waypoints(spacing=config.ENV_WAYPOINT_SPACING)
         if self.__verbose:
+            print("Waypoints loaded!")
             self.draw_waypoints(self.__waypoints)
         # Turn each waypoint into a list of 3 elements
         self.__waypoints = [np.array([w.x, w.y, w.z]) for w in self.__waypoints]
 
         # 4. Get the initial state (Get the observation data)
-        time.sleep(0.5)
         self.__update_observation()
 
         # 5. Start the reward function
@@ -196,7 +197,9 @@ class CarlaEnv(gym.Env):
             raise NotImplementedError("This mode is not implemented yet")
 
     def step(self, action):
-        # 0. Tick the world if in synchronous mode
+        # 0. Control the vehicle
+        self.__control_vehicle(np.array(action))
+        # 1. Tick the world if in synchronous mode
         if self.__synchronous_mode:
             try:
                 self.__world.tick()
@@ -205,8 +208,6 @@ class CarlaEnv(gym.Env):
                 print("Episode interrupted!")
                 exit(0)
         self.number_of_steps += 1
-        # 1. Control the vehicle
-        self.__control_vehicle(np.array(action))
         # 1.5 Tick the display if it is active
         if self.__show_sensor_data:
             self.display.play_window_tick()
@@ -217,9 +218,10 @@ class CarlaEnv(gym.Env):
             self.__vehicle,
             self.__reward_current_pos,
             self.__reward_target_pos,
-            self.__reward_next_waypoint_pos,
+            self.__reward_current_waypoint_pos,
             self.__reward_speed,
             self.__reward_min_distance,
+            self.number_of_steps,
         )
         terminated = self.__reward_func.get_terminated()
         self.__waypoints = self.__reward_func.get_waypoints()
@@ -235,7 +237,7 @@ class CarlaEnv(gym.Env):
             print(
                 f"Episode ended with reward {self.__reward_func.get_total_ep_reward()}."
             )
-            self.clean_scenario()
+            print(f"Subrewards: {self.__reward_func.get_subrewards()}")
             print("------------------------------------------------------")
 
         # 6. Make information about the scenario available
@@ -271,10 +273,10 @@ class CarlaEnv(gym.Env):
         vehicle_position = np.array([vehicle_position.x, vehicle_position.y])
 
         vehicle_heading = np.deg2rad(self.__vehicle.get_heading())
+        heading_sin = np.sin(vehicle_heading)
+        heading_cos = np.cos(vehicle_heading)
 
         circogram = observation_space["circogram_data"]
-        circogram_distance = circogram[:, 0]
-        circogram_velocity = circogram[:, 1:3]
 
         vehicle_velocity = self.__vehicle.get_velocity()
         vehicle_velocity = np.array([vehicle_velocity.x, vehicle_velocity.y])
@@ -288,31 +290,68 @@ class CarlaEnv(gym.Env):
         )
 
         try:
-            next_waypoint_position = np.array(
+            current_waypoint_position = np.array(
                 [self.__waypoints[0][0], self.__waypoints[0][1]]
             )
         except IndexError:
-            print("No more waypoints!")
-            next_waypoint_position = np.array([0.0, 0.0])
+            print("No current waypoint!")
+            current_waypoint_position = vehicle_position
+
+        try:
+            next_waypoint_position = np.array(
+                [self.__waypoints[1][0], self.__waypoints[1][1]]
+            )
+        except IndexError:
+            print("No next waypoint!")
+            next_waypoint_position = current_waypoint_position
+
+        current_waypoint_relative_position = (
+            current_waypoint_position - vehicle_position
+        )
+
+        """         # Convert to polar coordinates
+        distance_to_current_waypoint = np.linalg.norm(
+            current_waypoint_relative_position
+        )
+        angle_to_current_waypoint = np.arctan2(
+            current_waypoint_relative_position[1], current_waypoint_relative_position[0]
+        )
+
+        current_waypoint_relative_position = np.array(
+            [
+                distance_to_current_waypoint,
+                np.sin(angle_to_current_waypoint),
+                np.cos(angle_to_current_waypoint),
+            ]
+        )
+        """
 
         next_waypoint_relative_position = next_waypoint_position - vehicle_position
+        """ 
         # Convert to polar coordinates
         distance_to_next_waypoint = np.linalg.norm(next_waypoint_relative_position)
         angle_to_next_waypoint = np.arctan2(
             next_waypoint_relative_position[1], next_waypoint_relative_position[0]
         )
         next_waypoint_relative_position = np.array(
-            [distance_to_next_waypoint, angle_to_next_waypoint]
+            [
+                distance_to_next_waypoint,
+                np.sin(angle_to_next_waypoint),
+                np.cos(angle_to_next_waypoint),
+            ]
         )
+        """
 
         observation = {
-            "circogram_distance": np.float32(circogram_distance),
-            "circogram_velocity": np.float32(circogram_velocity),
+            "circogram": np.float32(circogram),
+            "velocity": np.float32(vehicle_velocity),
+            "heading": np.float32(np.array([heading_sin, heading_cos])),
+            "current_waypoint_relative_position": np.float32(
+                current_waypoint_relative_position
+            ),
             "next_waypoint_relative_position": np.float32(
                 next_waypoint_relative_position
             ),
-            "speed": np.float32(np.array([vehicle_speed])),
-            "heading": np.float32(np.array([vehicle_heading])),
             "previous_steering": np.float32(np.array([self.__vehicle.get_steering()])),
             "previous_throttle_brake": np.float32(
                 np.array([self.__vehicle.get_throttle_brake()])
@@ -324,7 +363,7 @@ class CarlaEnv(gym.Env):
         # Aux variables for the reward function so the information that is given to the ego vehicle and to the reward function is the same no matter what happens
         self.__reward_target_pos = target_position
         self.__reward_current_pos = vehicle_position
-        self.__reward_next_waypoint_pos = next_waypoint_position
+        self.__reward_current_waypoint_pos = current_waypoint_position
         self.__reward_speed = vehicle_speed
         self.__reward_min_distance = circogram[:, 0].min()
 
@@ -352,12 +391,8 @@ class CarlaEnv(gym.Env):
             self.__world.reload_map()
         self.__first_episode = False
 
-        # Settings
-        self.__world.set_settings()
-
         self.__load_world(scenario_dict["map_name"])
         self.__map = self.__world.update_traffic_map()
-        time.sleep(2.0)
         if self.__verbose:
             print("World loaded!")
 
@@ -390,22 +425,19 @@ class CarlaEnv(gym.Env):
 
         # Tick the world to make sure everything is loaded
         self.__world.tick()
+        self.__world.tick()
 
     def clean_scenario(self):
-        # If synchronous mode is on, make it unsynchronous to destroy the vehicle
-        if self.__synchronous_mode:
-            settings = self.__world.get_world().get_settings()
-            settings.synchronous_mode = False
-            settings.fixed_delta_seconds = None
-            self.__world.get_world().apply_settings(settings)
-
-        self.__vehicle.destroy_vehicle()
-        self.__world.destroy_vehicles()
+        vehicles = self.__world.get_world().get_actors().filter("vehicle.*")
+        walkers = self.__world.get_world().get_actors().filter("walker.*")
+        sensors = self.__world.get_world().get_actors().filter("sensor.*")
+        all_actors = list(vehicles) + list(walkers) + list(sensors)
+        self.__world.get_client().apply_batch(
+            [carla.command.DestroyActor(x) for x in all_actors]
+        )
+        self.__vehicle.clean_vehicle()
+        self.__world.clean_vehicles()
         self.__world.destroy_pedestrians()
-
-        if self.__episode_number % self.__restart_every == 0:
-            self.__world.set_timeout(4.0)
-            self.__world.reload_map()
 
         if self.__verbose:
             print("Scenario cleaned!")
@@ -579,7 +611,7 @@ class CarlaEnv(gym.Env):
                 persistent_lines=True,
             )
 
-    def draw_waypoints(self, waypoints, life_time=10.0):
+    def draw_waypoints(self, waypoints, life_time=0.0):
         for w in waypoints:
             self.__world.get_world().debug.draw_string(
                 w,
