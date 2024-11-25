@@ -45,7 +45,7 @@ class MapControl:
         if map_name in ["Town15", "Town11", "Town12", "Town13"]:
             map_name += f"/{map_name}"
         self.__client.load_world("/Game/Carla/Maps/" + map_name, reset_settings=False)
-        time.sleep(3)
+        time.sleep(2)
         self.__world = self.__client.get_world()
         self.__map = self.__world.get_map()
 
@@ -57,5 +57,5 @@ class MapControl:
 
     def reload_map(self):
         self.__client.reload_world(reset_settings=False)
-        time.sleep(3)
+        time.sleep(2)
         self.__world = self.__client.get_world()

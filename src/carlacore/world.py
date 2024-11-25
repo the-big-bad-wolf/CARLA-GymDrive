@@ -24,13 +24,12 @@ class World:
             self.__client = carla.Client(config.SIM_HOST, config.SIM_PORT)
             self.__client.set_timeout(config.SIM_TIMEOUT)
         self.__world = self.__client.get_world()
+        self.__synchronous_mode = synchronous_mode
+        self.set_settings()
         self.__weather_control = WeatherControl(self.__world)
         self.__traffic_control = TrafficControl(self.__world)
         self.__map_control = MapControl(self.__world, self.__client)
         self.__map = self.__map_control.get_map()
-
-        self.__synchronous_mode = synchronous_mode
-        self.set_settings()
 
         if config.VERBOSE:
             print("World initialized!")

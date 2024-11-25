@@ -27,7 +27,7 @@ class Reward:
         self.current_steering = 0.0
         self.current_throttle = 0.0
         self.waypoints = []
-        self.current_waypoint_distance = 0.0
+        self.previous_target_distance = 0.0
         self.total_ep_reward = 0
         self.total_collision_reward = 0
         self.total_steering_jerk_reward = 0
@@ -68,18 +68,18 @@ class Reward:
         )
 
         total_reward = (
-            collision_reward
-            + steering_jerk_reward
-            + throttle_brake_jerk_reward
-            # + speed_reward
+            # collision_reward
+            # +steering_jerk_reward
+            # + throttle_brake_jerk_reward
+            # +speed_reward
             # + steering_reward
-            + target_destination_reward
+            +target_destination_reward
             + waypoint_reached_reward
         )
 
-        self.total_collision_reward += collision_reward
-        self.total_steering_jerk_reward += steering_jerk_reward
-        self.total_throttle_brake_jerk_reward += throttle_brake_jerk_reward
+        # self.total_collision_reward += collision_reward
+        # self.total_steering_jerk_reward += steering_jerk_reward
+        # self.total_throttle_brake_jerk_reward += throttle_brake_jerk_reward
         # self.total_speed_reward += speed_reward
         # self.total_steering_reward += steering_reward
         self.total_target_destination_reward += target_destination_reward
@@ -136,25 +136,14 @@ class Reward:
         return -(throttle_diff**2) / 1000 if throttle_diff > threshold else 0.0
 
     def __speed_reward(self, speed, speed_limit=50):
-        """
-        This reward function is based on the speed of the vehicle. It aims to keep the vehicle at a good speed while preventing it from going over the speed limit. The reward is calculated as follows:
-        {
-            0       : if speed < 2,
-            lambda  : if speed >= 2
-            -lambda : if speed > speed_limit
-        }
-
-        Based on precise calculations the max reward for this function is 15 and the min reward is -15.
-        lambda = 15/config.ENV_MAX_STEPS
-        """
-        lbd = 50 / config.ENV_MAX_STEPS
-
-        if speed < 2:
-            return -lbd
-        elif speed >= 2 and speed <= speed_limit:
-            return 0
+        lbd = 100 / config.ENV_MAX_STEPS
+        speed = speed * 3.6  # convert to km/h
+        minspeed = 20
+        fraction = speed / minspeed
+        if fraction < 1:
+            return fraction * lbd
         else:
-            return -lbd
+            return lbd
 
     def __steering_reward(self, vehicle: Vehicle, threshold=0.0):
         """
@@ -175,8 +164,14 @@ class Reward:
 
         Based on precise calculations the max reward for this function is 100 and the min reward is 0.
         """
-        target_distance = self.distance(current_pos, target_pos)
-
+        target_distance = self.distance(current_pos, target_pos).item()
+        progress = self.previous_target_distance - target_distance
+        self.previous_target_distance = target_distance
+        if target_distance < threshold:
+            self.terminated = True
+            return 100.0
+        else:
+            return progress
         if target_distance <= threshold:
             self.terminated = True
             return 100.0
@@ -187,21 +182,16 @@ class Reward:
         else:
             return 0.0
 
-    def __waypoint_reached(self, current_pos, current_waypoint_pos, threshold=5.0):
+    def __waypoint_reached(self, current_pos, current_waypoint_pos, threshold=2.0):
         waypoint_distance = self.distance(current_pos, current_waypoint_pos)
-        progress = (self.current_waypoint_distance - waypoint_distance).item()
-        self.current_waypoint_distance = waypoint_distance
-        lbd = 100 / config.ENV_MAX_STEPS
-        if progress <= 0:
-            reward = progress * 10.01 - lbd
-        else:
-            reward = progress * 10 + lbd
         if waypoint_distance < threshold:
-            self.waypoints.pop(0)
-            reward += 5
-            return reward
+            try:
+                self.waypoints.pop(0)
+            except IndexError:
+                pass
+            return 2
         else:
-            return reward
+            return 0
 
     def __light_pole_trangression(self, map, vehicle, world):
         """
@@ -319,8 +309,8 @@ class Reward:
         self.total_target_destination_reward = 0
         self.total_waypoint_reached_reward = 0
         vehicle_loc = vehicle.get_location()
-        self.current_waypoint_distance = self.distance(
-            waypoints[0], np.array([vehicle_loc.x, vehicle_loc.y, vehicle_loc.z])
+        self.previous_target_distance = self.distance(
+            waypoints[-1], np.array([vehicle_loc.x, vehicle_loc.y, vehicle_loc.z])
         )
 
     def get_terminated(self):

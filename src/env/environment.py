@@ -279,8 +279,8 @@ class CarlaEnv(gym.Env):
         circogram = observation_space["circogram_data"]
 
         vehicle_velocity = self.__vehicle.get_velocity()
+        vehicle_speed = vehicle_velocity.length()
         vehicle_velocity = np.array([vehicle_velocity.x, vehicle_velocity.y])
-        vehicle_speed = np.linalg.norm(vehicle_velocity)
 
         target_position = np.array(
             [
@@ -288,6 +288,7 @@ class CarlaEnv(gym.Env):
                 self.__active_scenario_dict["target_position"]["y"],
             ]
         )
+        target_relative_position = target_position - vehicle_position
 
         try:
             current_waypoint_position = np.array(
@@ -295,7 +296,7 @@ class CarlaEnv(gym.Env):
             )
         except IndexError:
             print("No current waypoint!")
-            current_waypoint_position = vehicle_position
+            current_waypoint_position = target_position
 
         try:
             next_waypoint_position = np.array(
@@ -352,6 +353,7 @@ class CarlaEnv(gym.Env):
             "next_waypoint_relative_position": np.float32(
                 next_waypoint_relative_position
             ),
+            "target_relative_position": np.float32(target_relative_position),
             "previous_steering": np.float32(np.array([self.__vehicle.get_steering()])),
             "previous_throttle_brake": np.float32(
                 np.array([self.__vehicle.get_throttle_brake()])
@@ -424,21 +426,20 @@ class CarlaEnv(gym.Env):
         self.__toggle_lights()
 
         # Tick the world to make sure everything is loaded
-        self.__world.tick()
-        self.__world.tick()
+        self.__world.tick(seconds=100)
 
     def clean_scenario(self):
-        vehicles = self.__world.get_world().get_actors().filter("vehicle.*")
-        walkers = self.__world.get_world().get_actors().filter("walker.*")
-        sensors = self.__world.get_world().get_actors().filter("sensor.*")
-        all_actors = list(vehicles) + list(walkers) + list(sensors)
-        self.__world.get_client().apply_batch(
-            [carla.command.DestroyActor(x) for x in all_actors]
-        )
-        self.__vehicle.clean_vehicle()
-        self.__world.clean_vehicles()
+        if self.__synchronous_mode:
+            settings = self.__world.get_world().get_settings()
+            settings.synchronous_mode = False
+            settings.fixed_delta_seconds = None
+            self.__world.get_world().apply_settings(settings)
+
+        self.__vehicle.destroy_vehicle()
+        self.__world.destroy_vehicles()
         self.__world.destroy_pedestrians()
 
+        self.__world.set_settings()
         if self.__verbose:
             print("Scenario cleaned!")
 

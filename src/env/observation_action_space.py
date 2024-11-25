@@ -16,10 +16,10 @@ observation_shapes = {
     "previous_throttle_brake": (1,),
 }
 
-circogram_low_row = np.array([0, -np.inf, -np.inf])
-circogram_high_row = np.array(
-    [50, np.inf, np.inf]
-)  # UPDATE WHEN CHANGING CIRCOGRAM RANGE
+max_speed = 30.0  # m/s
+circogram_range = 50.0  # meters
+circogram_low_row = np.array([0.0, -max_speed, -max_speed])
+circogram_high_row = np.array([circogram_range, max_speed, max_speed])
 
 situations_map = {"Road": 0, "Roundabout": 1, "Junction": 2, "Tunnel": 3}
 
@@ -28,43 +28,41 @@ observation_space = spaces.Dict(
         "circogram": spaces.Box(
             low=np.stack([circogram_low_row for _ in range(60)]),
             high=np.stack([circogram_high_row for _ in range(60)]),
-            shape=observation_shapes["circogram"],
             dtype=np.float32,
         ),
         "velocity": spaces.Box(
-            low=np.array([-np.inf, -np.inf]),
-            high=np.array([np.inf, np.inf]),
-            shape=observation_shapes["velocity"],
+            low=np.array([-max_speed, -max_speed]),
+            high=np.array([max_speed, max_speed]),
             dtype=np.float32,
         ),
         "heading": spaces.Box(
-            low=np.array([-1, -1]),
-            high=np.array([1, 1]),
-            shape=observation_shapes["heading"],
+            low=np.array([-1.0, -1.0]),
+            high=np.array([1.0, 1.0]),
             dtype=np.float32,
         ),
         "current_waypoint_relative_position": spaces.Box(
-            low=np.array([-np.inf, -np.inf]),
-            high=np.array([np.inf, np.inf]),
-            shape=observation_shapes["current_waypoint_relative_position"],
+            low=np.array([-500, -500]),
+            high=np.array([500, 500]),
             dtype=np.float32,
         ),
         "next_waypoint_relative_position": spaces.Box(
-            low=np.array([-np.inf, -np.inf]),
-            high=np.array([np.inf, np.inf]),
-            shape=observation_shapes["next_waypoint_relative_position"],
+            low=np.array([-500, -500]),
+            high=np.array([500, 500]),
+            dtype=np.float32,
+        ),
+        "target_relative_position": spaces.Box(
+            low=np.array([-500, -500]),
+            high=np.array([500, 500]),
             dtype=np.float32,
         ),
         "previous_steering": spaces.Box(
-            low=-1,
-            high=1,
-            shape=observation_shapes["previous_steering"],
+            low=-1.0,
+            high=1.0,
             dtype=np.float32,
         ),
         "previous_throttle_brake": spaces.Box(
-            low=-1,
-            high=1,
-            shape=observation_shapes["previous_throttle_brake"],
+            low=-1.0,
+            high=1.0,
             dtype=np.float32,
         ),
     }
