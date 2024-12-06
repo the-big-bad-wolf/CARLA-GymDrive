@@ -41,18 +41,18 @@ observation_space = spaces.Dict(
             dtype=np.float32,
         ),
         "current_waypoint_relative_position": spaces.Box(
-            low=np.array([-500, -500]),
-            high=np.array([500, 500]),
+            low=np.array([-300, -300]),
+            high=np.array([300, 300]),
             dtype=np.float32,
         ),
         "next_waypoint_relative_position": spaces.Box(
-            low=np.array([-500, -500]),
-            high=np.array([500, 500]),
+            low=np.array([-300, -300]),
+            high=np.array([300, 300]),
             dtype=np.float32,
         ),
         "target_relative_position": spaces.Box(
-            low=np.array([-500, -500]),
-            high=np.array([500, 500]),
+            low=np.array([-300, -300]),
+            high=np.array([300, 300]),
             dtype=np.float32,
         ),
         "previous_steering": spaces.Box(

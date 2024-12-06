@@ -9,15 +9,15 @@ If you want to train an agent for a more real-life problem, you should consider 
 from src.env.environment import (
     CarlaEnv,
 )  # It is mandatory to import the environment even if it is not used in this script
-from stable_baselines3 import DQN, SAC, PPO
+from stable_baselines3 import PPO
 import gymnasium as gym
-from stable_baselines3.common.vec_env import DummyVecEnv, VecTransposeImage
+from stable_baselines3.common.vec_env import DummyVecEnv, VecMonitor
 
 
 def make_env():
     env = gym.make(
         "carla-rl-gym-v0",
-        time_limit=45,
+        time_limit=1000,
         initialize_server=False,
         random_weather=False,
         synchronous_mode=True,
@@ -32,21 +32,25 @@ def make_env():
 def main():
     # Create the environment
     env = DummyVecEnv([make_env])
+    env = VecMonitor(env)
+
     # Create the agent
-    """     
+
     model = PPO(
         policy="MultiInputPolicy",
         env=env,
         verbose=1,
         tensorboard_log="data/tensorboard/",
     )
-     """
-    model = PPO.load("models/candidate18_25000.zip", env=env)
+
+    # model = PPO.load("models/candidate21_125000.zip", env=env)
 
     # Save the agent at regular intervals
     for i in range(1, 21):
         model.learn(
-            total_timesteps=25000
+            total_timesteps=25000,
+            reset_num_timesteps=False,
+            progress_bar=True,
         )  # This causes some issues the spawning actors when not restarting the CARLA server
         model.save(f"output/ppo_agent_{i*25000}")
 

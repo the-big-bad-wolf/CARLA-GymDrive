@@ -34,7 +34,9 @@ class Reward:
         self.total_throttle_brake_jerk_reward = 0
         self.total_speed_reward = 0
         self.total_steering_reward = 0
-        self.total_target_destination_reward = 0
+        self.total_target_reached_reward = 0
+        self.total_target_progress_reward = 0
+        self.total_target_progress = 0
         self.total_waypoint_reached_reward = 0
 
         self.countint = 0
@@ -62,31 +64,33 @@ class Reward:
         throttle_brake_jerk_reward = self.__throttle_brake_jerk(vehicle)
         speed_reward = self.__speed_reward(speed)
         steering_reward = self.__steering_reward(vehicle)
-        target_destination_reward = self.__target_destination(current_pos, target_pos)
+        target_reached_reward = self.__target_reached(current_pos, target_pos)
+        target_progress_reward = self.__target_progress(current_pos, target_pos)
         waypoint_reached_reward = self.__waypoint_reached(
             current_pos, current_waypoint_pos
         )
 
         total_reward = (
-            # collision_reward
-            # +steering_jerk_reward
-            # + throttle_brake_jerk_reward
-            # +speed_reward
+            collision_reward
+            + steering_jerk_reward
+            + throttle_brake_jerk_reward
+            # + speed_reward
             # + steering_reward
-            +target_destination_reward
+            + target_reached_reward
+            + target_progress_reward
             + waypoint_reached_reward
         )
 
-        # self.total_collision_reward += collision_reward
-        # self.total_steering_jerk_reward += steering_jerk_reward
-        # self.total_throttle_brake_jerk_reward += throttle_brake_jerk_reward
+        self.total_collision_reward += collision_reward
+        self.total_steering_jerk_reward += steering_jerk_reward
+        self.total_throttle_brake_jerk_reward += throttle_brake_jerk_reward
         # self.total_speed_reward += speed_reward
         # self.total_steering_reward += steering_reward
-        self.total_target_destination_reward += target_destination_reward
+        self.total_target_reached_reward += target_reached_reward
+        self.total_target_progress_reward += target_progress_reward
         self.total_waypoint_reached_reward += waypoint_reached_reward
 
         self.total_ep_reward += total_reward
-
         return total_reward
 
     # ============================================= Reward Functions ==========================================================
@@ -94,12 +98,12 @@ class Reward:
         self, vehicle: Vehicle, min_distance: float, number_of_steps: int
     ):
         if vehicle.collision_occurred() or min_distance == 0:
-            episode_duration = number_of_steps / config.ENV_MAX_STEPS
+            episode_duration = (number_of_steps - 1) / config.ENV_MAX_STEPS
             crash_penalty = -100 + (episode_duration * 100)
             self.terminated = True
             return crash_penalty
         else:
-            return 0
+            return -100 / config.ENV_MAX_STEPS
 
     def __steering_jerk(self, vehicle: Vehicle, threshold=0.0):
         """
@@ -113,10 +117,10 @@ class Reward:
         lambda = 1/300
         """
         steering_diff = (
-            abs(vehicle.get_steering() - self.current_steering) * config.SIM_FPS
+            abs(vehicle.get_steering() - self.current_steering) ** 2 * config.SIM_FPS
         )
         self.current_steering = vehicle.get_steering()
-        return -(steering_diff**2) / 1000 if steering_diff > threshold else 0.0
+        return -steering_diff / 800 if steering_diff > threshold else 0.0
 
     def __throttle_brake_jerk(self, vehicle: Vehicle, threshold=0.1):
         """
@@ -130,10 +134,11 @@ class Reward:
         lambda = 1/300
         """
         throttle_diff = (
-            abs(vehicle.get_throttle_brake() - self.current_throttle) * config.SIM_FPS
+            abs(vehicle.get_throttle_brake() - self.current_throttle) ** 2
+            * config.SIM_FPS
         )
         self.current_throttle = vehicle.get_throttle_brake()
-        return -(throttle_diff**2) / 1000 if throttle_diff > threshold else 0.0
+        return -throttle_diff / 800 if throttle_diff > threshold else 0.0
 
     def __speed_reward(self, speed, speed_limit=50):
         lbd = 100 / config.ENV_MAX_STEPS
@@ -152,35 +157,20 @@ class Reward:
         steering = vehicle.get_steering()
         return -abs(steering)
 
-    def __target_destination(self, current_pos, target_pos, threshold=5.0):
-        """
-        This function rewards the vehicle more generously the closer it gets to the target, and, if it reaches the target, it gives an incredibly high reward, as to tell him that it arrived. The reward is calculated as follows:
-        {
-            100                                                : if distance <= threshold,
-            (-7 * distance + 395) / (9 * config.ENV_MAX_STEPS) : if 5 < distance <= 50,   # More accentuated reward for being closer to the target
-            (100 - distance) / (10 * config.ENV_MAX_STEPS)     : if 50 < distance <= 100, # Less accentuated reward for being further from the target
-            0                                                  : if distance > 100
-        }
-
-        Based on precise calculations the max reward for this function is 100 and the min reward is 0.
-        """
+    def __target_reached(self, current_pos, target_pos, threshold=5.0):
         target_distance = self.distance(current_pos, target_pos).item()
-        progress = self.previous_target_distance - target_distance
-        self.previous_target_distance = target_distance
+
         if target_distance < threshold:
             self.terminated = True
             return 100.0
         else:
-            return progress
-        if target_distance <= threshold:
-            self.terminated = True
-            return 100.0
-        elif target_distance > threshold and target_distance <= 50.0:
-            return (-7.0 * target_distance + 395.0) / (9.0 * config.ENV_MAX_STEPS)
-        elif target_distance > 50.0 and target_distance <= 100.0:
-            return (100.0 - target_distance) / (10.0 * config.ENV_MAX_STEPS)
-        else:
             return 0.0
+
+    def __target_progress(self, current_pos, target_pos, threshold=5.0):
+        target_distance = self.distance(current_pos, target_pos).item()
+        progress = self.previous_target_distance - target_distance
+        self.previous_target_distance = target_distance
+        return progress
 
     def __waypoint_reached(self, current_pos, current_waypoint_pos, threshold=2.0):
         waypoint_distance = self.distance(current_pos, current_waypoint_pos)
@@ -189,7 +179,7 @@ class Reward:
                 self.waypoints.pop(0)
             except IndexError:
                 pass
-            return 2
+            return 10
         else:
             return 0
 
@@ -306,7 +296,8 @@ class Reward:
         self.total_throttle_brake_jerk_reward = 0
         self.total_speed_reward = 0
         self.total_steering_reward = 0
-        self.total_target_destination_reward = 0
+        self.total_target_reached_reward = 0
+        self.total_target_progress_reward = 0
         self.total_waypoint_reached_reward = 0
         vehicle_loc = vehicle.get_location()
         self.previous_target_distance = self.distance(
@@ -326,6 +317,7 @@ class Reward:
             "throttle_brake_jerk_reward": self.total_throttle_brake_jerk_reward,
             "speed_reward": self.total_speed_reward,
             "steering_reward": self.total_steering_reward,
-            "target_destination_reward": self.total_target_destination_reward,
+            "target_reached_reward": self.total_target_reached_reward,
+            "target_progress_reward": self.total_target_progress_reward,
             "waypoint_reached_reward": self.total_waypoint_reached_reward,
         }
