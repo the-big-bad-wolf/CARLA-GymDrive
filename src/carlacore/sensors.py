@@ -567,7 +567,7 @@ class Circogram:
         self.__circogram_velocity_radial = [0.0] * len(self.__sensors)
         self.__circogram_velocity_transverse_sin = [0.0] * len(self.__sensors)
         self.__circogram_velocity_transverse_cos = [0.0] * len(self.__sensors)
-        self.__drivable_tags = {1: "Roads", 24: "RoadLine", 21: "Water"}
+        self.__drivable_tags = {0: "Unlabeled", 1: "Roads", 24: "RoadLine", 21: "Water"}
 
         weak_self = weakref.ref(self)
         for sensor, location, angle in self.__sensors:
